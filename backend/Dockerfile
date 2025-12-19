@@ -51,7 +51,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
 # Comando para iniciar la aplicación con Gunicorn
-# -w 2: 2 workers (ajustar según recursos disponibles)
-# --threads 2: para mejor concurrencia con pocos workers
+# -w 1: 1 worker para evitar database locks con Cloud Storage FUSE
+# --threads 4: compensar con más threads por worker
 # --timeout 120: para operaciones ML que pueden tardar
-CMD ["gunicorn", "--workers", "2", "--threads", "2", "--timeout", "120", "--bind", "0.0.0.0:5000", "app:app"]
+CMD ["gunicorn", "--workers", "1", "--threads", "4", "--timeout", "120", "--bind", "0.0.0.0:5000", "app:app"]

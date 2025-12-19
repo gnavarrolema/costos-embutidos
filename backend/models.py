@@ -354,6 +354,7 @@ class InflacionMensual(db.Model):
 def init_db(app):
     """Inicializa la base de datos con datos semilla"""
     with app.app_context():
+        # Flask-SQLAlchemy 3.x: create_all() es idempotente por defecto
         db.create_all()
         
         # Crear usuario administrador por defecto si no existe ninguno

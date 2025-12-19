@@ -193,6 +193,16 @@ if db_uri.startswith('sqlite:///') and not db_uri.startswith('sqlite:////'):  # 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Configuración SQLite para Cloud Storage FUSE (mejor compatibilidad)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {
+        'timeout': 30,  # Timeout más largo para operaciones de red
+        'check_same_thread': False,  # Permitir acceso multi-thread
+    },
+    'pool_pre_ping': True,  # Verificar conexiones antes de usar
+    'pool_recycle': 3600,  # Reciclar conexiones cada hora
+}
+
 logger.info(
     "backend.start version=%s db=%s skip_init_db=%s",
     APP_VERSION,
