@@ -7,10 +7,11 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para algunas librerías de ML
+# Instalar dependencias del sistema necesarias para algunas librerías de ML y PostgreSQL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgomp1 \
+    libpq-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
