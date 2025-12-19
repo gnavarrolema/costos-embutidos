@@ -1,8 +1,12 @@
 # Dockerfile para la construcción del Frontend
-# Multi-stage build optimizado para copiar a volumen compartido
+# Multi-stage build optimizado para Google Cloud Run
 FROM node:20-slim AS build-stage
 
 WORKDIR /app
+
+# Argumento para la URL del API (se pasa en build time)
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 
 # Copiar archivos de configuración de dependencias
 COPY package*.json ./
@@ -16,8 +20,18 @@ COPY . .
 # Generar el build de producción
 RUN npm run build
 
-# Etapa final: Alpine mínimo con los archivos y shell para copiar al volumen
-FROM alpine:3.19 AS final-stage
-RUN apk add --no-cache coreutils
-COPY --from=build-stage /app/dist /dist
-# El comando se especifica en docker-compose.yml
+# Etapa final: Nginx para servir el frontend en Cloud Run
+FROM nginx:stable-alpine AS final-stage
+
+# Copiar configuración de Nginx para Cloud Run (sin proxy al backend)
+COPY nginx.cloudrun.conf /etc/nginx/nginx.conf
+
+# Copiar archivos estáticos del build
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+
+# Cloud Run requiere que el servicio escuche en el puerto definido por la variable PORT
+# Nginx está configurado para escuchar en el puerto 80 por defecto
+EXPOSE 80
+
+# Comando para iniciar Nginx
+CMD ["nginx", "-g", "daemon off;"]
