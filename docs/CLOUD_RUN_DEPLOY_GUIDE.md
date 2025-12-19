@@ -214,22 +214,23 @@ gcloud config set run/region us-central1
 
 ---
 
-## 🗄️ Paso 4: Configurar Base de Datos (Cloud SQL)
+## 🗄️ Paso 4: Configurar Base de Datos
 
-Tienes dos opciones para la base de datos:
+> 💡 **Para tu caso (200 req/mes)**: **Puedes SALTARTE este paso completamente**. Vas a usar SQLite + Cloud Storage (configurado en el Paso 6), que es gratis y más que suficiente.
 
-### Opción A: SQLite (Simple, para desarrollo/demo)
+---
 
-La app ya viene configurada para usar SQLite. Para producción ligera, puedes usar un volumen persistente, pero **Cloud Run no mantiene estado entre instancias**.
+### ⚠️ Cloud SQL PostgreSQL (Solo para Alto Tráfico)
 
-**Limitación**: Los datos se pierden cuando la instancia escala a 0.
+**Solo necesitas esto si tienes > 10,000 req/mes** o múltiples instancias concurrentes.
 
-### Opción B: Cloud SQL PostgreSQL (Recomendado para producción)
+<details>
+<summary><b>Click aquí para ver instrucciones de Cloud SQL (OPCIONAL)</b></summary>
 
 #### 4.1 Crear Instancia de Cloud SQL
 
 ```bash
-# Habilitar la API de Cloud SQL (si no lo hiciste antes)
+# Habilitar la API de Cloud SQL
 gcloud services enable sqladmin.googleapis.com
 
 # Crear la instancia PostgreSQL (puede tomar 5-10 minutos)
@@ -242,7 +243,7 @@ gcloud sql instances create costos-db \
     --availability-type=zonal
 ```
 
-> ⚠️ **Nota sobre costos**: `db-f1-micro` es la instancia más pequeña (~$7-10/mes). Para el tier gratuito de $300, esto está cubierto por varios meses.
+> ⚠️ **Costo**: `db-f1-micro` cuesta ~$7-10/mes (no incluido en tier gratuito)
 
 #### 4.2 Configurar Usuario y Base de Datos
 
@@ -263,10 +264,13 @@ gcloud sql databases create costos_embutidos --instance=costos-db
 gcloud sql instances describe costos-db --format="value(connectionName)"
 ```
 
-**Guarda este valor**, lo necesitarás para configurar Cloud Run. Será algo como:
-```
-costos-embutidos:us-central1:costos-db
-```
+**Guarda este valor** para usar en el Paso 6, Opción C.
+
+</details>
+
+---
+
+**Continúa con el Paso 5** →
 
 ---
 
