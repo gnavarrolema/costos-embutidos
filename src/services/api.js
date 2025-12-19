@@ -1,4 +1,9 @@
-const API_BASE = '/api'
+// En producción (Cloud Run), VITE_API_URL apuntará al backend
+// En desarrollo, usará el proxy configurado en vite.config.js
+const API_BASE = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/api` 
+  : '/api'
+
 const TOKEN_KEY = 'costos_embutidos_token'
 
 // Obtener token del localStorage
