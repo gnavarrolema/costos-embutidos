@@ -55,9 +55,6 @@ Desktop.ini
 # Docker
 *.pid
 
-# Documentación generada
-docs/
-
 # Carpeta instance (Flask)
 instance/
 

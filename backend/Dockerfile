@@ -1,5 +1,4 @@
 # Dockerfile para el Backend de Costos Embutidos
-# Compatible con ARM64 (Oracle Cloud Free Tier Ampere)
 FROM python:3.11-slim
 
 # Evitar que Python genere archivos .pyc y permitir logs en tiempo real
@@ -44,7 +43,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
 
 # Comando para iniciar la aplicación con Gunicorn
-# -w 2 (2 workers para Oracle Free Tier: 1 OCPU Ampere = ~1GB RAM)
-# --threads 2 para mejor concurrencia con pocos workers
-# --timeout 120 para operaciones ML que pueden tardar
+# -w 2: 2 workers (ajustar según recursos disponibles)
+# --threads 2: para mejor concurrencia con pocos workers
+# --timeout 120: para operaciones ML que pueden tardar
 CMD ["gunicorn", "--workers", "2", "--threads", "2", "--timeout", "120", "--bind", "0.0.0.0:5000", "app:app"]

@@ -10,15 +10,14 @@ on:
       environment:
         description: 'Deployment environment'
         required: true
-        default: 'staging'
+        default: 'production'
         type: choice
         options:
-          - staging
           - production
 
 jobs:
   # ============================================
-  # Build and Package
+  # Build and Test
   # ============================================
   build:
     name: Build Application
@@ -68,10 +67,10 @@ jobs:
           retention-days: 30
 
   # ============================================
-  # Deploy to Oracle Cloud (ARM Ampere)
+  # Deploy to Railway
   # ============================================
   deploy:
-    name: Deploy to Oracle Cloud
+    name: Deploy to Railway
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -80,48 +79,16 @@ jobs:
       url: ${{ vars.PRODUCTION_URL }}
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ${{ secrets.ORACLE_USER }}
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          command_timeout: 30m
-          script: |
-            set -e
-            cd ~/costos-embutidos
-            
-            echo "📥 Pulling latest code..."
-            git fetch origin main
-            git reset --hard origin/main
-            
-            echo "🔧 Building and starting services..."
-            # Usar docker compose v2 (sin guión)
-            docker compose -f docker-compose.production.yml down --remove-orphans || true
-            docker compose -f docker-compose.production.yml build --no-cache
-            docker compose -f docker-compose.production.yml up -d
-            
-            echo "⏳ Waiting for services to be healthy..."
-            sleep 10
-            
-            # Verificar que el backend responde
-            for i in {1..30}; do
-              if curl -sf http://localhost:80/api/health > /dev/null 2>&1; then
-                echo "✅ Backend is healthy!"
-                break
-              fi
-              echo "Waiting for backend... ($i/30)"
-              sleep 2
-            done
-            
-            echo "🧹 Cleaning up unused resources..."
-            docker image prune -af --filter "until=24h"
-            docker volume prune -f
-            
-            echo "📊 Current status:"
-            docker compose -f docker-compose.production.yml ps
-            
-            echo "✅ Deployment completed successfully!"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --detach
 
   # ============================================
   # Create Release (on tags)

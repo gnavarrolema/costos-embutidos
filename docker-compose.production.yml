@@ -6,10 +6,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      # Soporte multi-arquitectura (AMD64 y ARM64/Oracle Ampere)
-      platforms:
-        - linux/amd64
-        - linux/arm64
     container_name: costos-backend
     restart: unless-stopped
     env_file:
@@ -22,10 +18,6 @@ services:
       - ./backend/models:/app/models:ro
     networks:
       - app-network
-    # Límites de recursos para Oracle Free Tier
-    # Usar mem_limit para compatibilidad con docker compose (sin Swarm)
-    mem_limit: 768m
-    mem_reservation: 256m
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5000/api/health" ]
       interval: 30s
@@ -48,8 +40,6 @@ services:
         condition: service_healthy
     networks:
       - app-network
-    mem_limit: 64m
-    mem_reservation: 32m
     healthcheck:
       test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/" ]
       interval: 30s
@@ -61,16 +51,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-      platforms:
-        - linux/amd64
-        - linux/arm64
     container_name: costos-frontend-builder
     volumes:
       - frontend-build:/output
-    # Usar shell con Alpine para copiar archivos
     entrypoint: [ "/bin/sh", "-c" ]
     command: [ "cp -R /dist/* /output/ && echo 'Frontend build copied successfully'" ]
-    mem_limit: 512m
 
 networks:
   app-network:
