@@ -1,0 +1,158 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  # ============================================
+  # Build and Package
+  # ============================================
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy-package
+          cp -r dist/ deploy-package/frontend/
+          cp -r backend/ deploy-package/backend/
+          rm -rf deploy-package/backend/__pycache__
+          rm -rf deploy-package/backend/tests
+          rm -rf deploy-package/backend/logs/*.log
+          rm -f deploy-package/backend/*.db
+          
+          # Create version file
+          echo "VERSION=$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA::7}" > deploy-package/VERSION
+          echo "BRANCH=${GITHUB_REF_NAME}" >> deploy-package/VERSION
+          echo "COMMIT=${GITHUB_SHA}" >> deploy-package/VERSION
+
+      - name: Upload deployment package
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-package-${{ github.sha }}
+          path: deploy-package/
+          retention-days: 30
+
+  # ============================================
+  # Deploy to Oracle Cloud (ARM Ampere)
+  # ============================================
+  deploy:
+    name: Deploy to Oracle Cloud
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd ~/costos-embutidos
+            
+            echo "📥 Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "🔧 Building and starting services..."
+            # Usar docker compose v2 (sin guión)
+            docker compose -f docker-compose.production.yml down --remove-orphans || true
+            docker compose -f docker-compose.production.yml build --no-cache
+            docker compose -f docker-compose.production.yml up -d
+            
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 10
+            
+            # Verificar que el backend responde
+            for i in {1..30}; do
+              if curl -sf http://localhost:80/api/health > /dev/null 2>&1; then
+                echo "✅ Backend is healthy!"
+                break
+              fi
+              echo "Waiting for backend... ($i/30)"
+              sleep 2
+            done
+            
+            echo "🧹 Cleaning up unused resources..."
+            docker image prune -af --filter "until=24h"
+            docker volume prune -f
+            
+            echo "📊 Current status:"
+            docker compose -f docker-compose.production.yml ps
+            
+            echo "✅ Deployment completed successfully!"
+
+  # ============================================
+  # Create Release (on tags)
+  # ============================================
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download deployment package
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-package-${{ github.sha }}
+          path: deploy-package/
+
+      - name: Create release archive
+        run: |
+          cd deploy-package
+          zip -r ../costos-embutidos-${{ github.ref_name }}.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: costos-embutidos-${{ github.ref_name }}.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}

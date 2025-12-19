@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+.venv
+__pycache__
+*.pyc
+*.pyo
+
+# Build outputs
+dist
+build
+
+# IDE and editors
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Environment files (use env_file in docker-compose)
+.env
+.env.*
+!.env.example
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Testing
+tests/
+coverage/
+.pytest_cache
+.coverage
+htmlcov/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmp/
+temp/
+*.tmp
+
+# Development configs
+docker-compose.yml
+docker-compose.override.yml

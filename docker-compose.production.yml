@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # Servicio del Backend (Flask)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      # Soporte multi-arquitectura (AMD64 y ARM64/Oracle Ampere)
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    container_name: costos-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=production
+    volumes:
+      - ./backend/instance:/app/instance
+      - ./backend/logs:/app/logs
+      - ./backend/models:/app/models:ro
+    networks:
+      - app-network
+    # Límites de recursos para Oracle Free Tier
+    # Usar mem_limit para compatibilidad con docker compose (sin Swarm)
+    mem_limit: 768m
+    mem_reservation: 256m
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Servicio de Nginx (Servidor Web + Proxy)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: costos-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - frontend-build:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    mem_limit: 64m
+    mem_reservation: 32m
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Servicio temporal para construir el frontend y copiar los archivos al volumen
+  frontend-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    container_name: costos-frontend-builder
+    volumes:
+      - frontend-build:/output
+    # Usar shell con Alpine para copiar archivos
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: [ "cp -R /dist/* /output/ && echo 'Frontend build copied successfully'" ]
+    mem_limit: 512m
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  frontend-build:

@@ -1,0 +1,320 @@
+.page-formulacion {
+    animation: fadeIn var(--transition-normal);
+}
+
+.producto-selector {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--spacing-8);
+    margin-bottom: var(--spacing-6);
+}
+
+.producto-selector .form-group {
+    flex: 1;
+    max-width: 400px;
+}
+
+.producto-info {
+    display: flex;
+    gap: var(--spacing-6);
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.info-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-neutral-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-value {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-neutral-800);
+}
+
+/* Formula Content Layout */
+.formula-content {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: var(--spacing-6);
+}
+
+.formula-table {
+    overflow: visible;
+}
+
+.ingredientes-section {
+    margin-bottom: var(--spacing-6);
+}
+
+.section-title {
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-neutral-600);
+    padding-bottom: var(--spacing-2);
+    border-bottom: 2px solid var(--color-neutral-200);
+    margin-bottom: var(--spacing-3);
+}
+
+/* Inline Input */
+.inline-input {
+    width: 100%;
+    padding: var(--spacing-2);
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--color-neutral-50);
+    font-family: var(--font-family);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    text-align: right;
+    transition: all var(--transition-fast);
+}
+
+.inline-input:hover {
+    border-color: var(--color-neutral-300);
+}
+
+.inline-input:focus {
+    outline: none;
+    border-color: var(--color-primary-500);
+    background: white;
+    box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+.cost-cell {
+    font-weight: 600;
+    color: var(--color-neutral-800);
+}
+
+.subtotal-row {
+    background: var(--color-neutral-50);
+}
+
+.subtotal-row td {
+    border-top: 2px solid var(--color-neutral-200);
+    padding-top: var(--spacing-3);
+    padding-bottom: var(--spacing-3);
+}
+
+/* Cost Sidebar */
+.cost-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+    position: sticky;
+    top: var(--spacing-4);
+    align-self: start;
+}
+
+/* Increased specificity to override global .card styles */
+.card.cost-summary-card {
+    background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.cost-summary-header {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 800;
+    margin-bottom: var(--spacing-6);
+    padding-bottom: var(--spacing-4);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    color: var(--color-primary-400);
+    text-align: center;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.cost-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-6);
+}
+
+.cost-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.05rem;
+    /* Larger text */
+    color: var(--color-neutral-200);
+    /* Higher contrast */
+    position: relative;
+    font-weight: 500;
+}
+
+.cost-line span:last-child {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: white;
+    font-size: 1.1rem;
+    /* Larger numbers */
+}
+
+/* Subtotal rows */
+.cost-line.subtotal {
+    color: white;
+    margin-top: var(--spacing-2);
+    padding-top: var(--spacing-3);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.cost-line.merma {
+    color: #fbbf24;
+    /* Brighter amber */
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+.page-formulacion .cost-total {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    background: rgba(0, 0, 0, 0.3);
+    /* Darker footer background */
+    margin: 0 calc(var(--spacing-6) * -1) calc(var(--spacing-6) * -1);
+    padding: var(--spacing-6);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Info lines in footer */
+.cost-info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    color: var(--color-neutral-300);
+}
+
+.total-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--spacing-3);
+}
+
+.total-line span:first-child {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: white;
+}
+
+.total-line .total-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    background: linear-gradient(to right, #34d399, #10b981);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.2));
+}
+
+.total-line.highlight {
+    background: transparent;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+}
+
+/* Category Summary */
+.category-summary h4 {
+    font-size: var(--font-size-sm);
+    color: var(--color-neutral-600);
+    margin-bottom: var(--spacing-4);
+}
+
+.category-bars {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.category-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.category-cost {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-neutral-700);
+}
+
+.category-bar-track {
+    height: 8px;
+    background: var(--color-neutral-100);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.category-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.category-bar-fill.cerdo {
+    background: linear-gradient(90deg, var(--color-cerdo) 0%, #c0392b 100%);
+}
+
+.category-bar-fill.pollo {
+    background: linear-gradient(90deg, var(--color-pollo) 0%, #d68910 100%);
+}
+
+.category-bar-fill.gallina {
+    background: linear-gradient(90deg, var(--color-gallina) 0%, #7d3c98 100%);
+}
+
+.category-bar-fill.insumos {
+    background: linear-gradient(90deg, var(--color-insumos) 0%, #2980b9 100%);
+}
+
+.category-bar-fill.envases {
+    background: linear-gradient(90deg, var(--color-envases) 0%, #1e8449 100%);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .formula-content {
+        grid-template-columns: 1fr;
+    }
+
+    .cost-sidebar {
+        position: static;
+    }
+
+    .cost-summary-card {
+        position: static;
+    }
+}
+
+@media (max-width: 768px) {
+    .producto-selector {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .producto-selector .form-group {
+        max-width: none;
+    }
+
+    .producto-info {
+        flex-wrap: wrap;
+    }
+}

@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Virtual env
+.venv
+venv
+
+# Cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+
+# Logs (se montan como volumen)
+logs/
+*.log
+
+# DB local (se monta como volumen)
+instance/
+*.db
+
+# IDE
+.vscode
+.idea
+
+# Tests (no necesarios en producción)
+tests/
+*_test.py
+test_*.py
+
+# Dev dependencies
+requirements-dev.txt
+
+# Docs
+*.md
+docs/
+
+# Temp
+tmp/
+*.tmp

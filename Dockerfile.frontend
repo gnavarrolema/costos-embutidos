@@ -1,0 +1,23 @@
+# Dockerfile para la construcción del Frontend
+# Multi-stage build optimizado para copiar a volumen compartido
+FROM node:20-slim AS build-stage
+
+WORKDIR /app
+
+# Copiar archivos de configuración de dependencias
+COPY package*.json ./
+
+# Instalar dependencias (usando ci para builds reproducibles)
+RUN npm ci --only=production=false
+
+# Copiar el resto del código del frontend
+COPY . .
+
+# Generar el build de producción
+RUN npm run build
+
+# Etapa final: Alpine mínimo con los archivos y shell para copiar al volumen
+FROM alpine:3.19 AS final-stage
+RUN apk add --no-cache coreutils
+COPY --from=build-stage /app/dist /dist
+# El comando se especifica en docker-compose.yml
