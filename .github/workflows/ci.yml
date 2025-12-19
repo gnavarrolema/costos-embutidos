@@ -50,6 +50,8 @@ jobs:
         env:
           COSTOS_EMBUTIDOS_SKIP_INIT_DB: '1'
           COSTOS_EMBUTIDOS_DATABASE_URI: 'sqlite:///:memory:'
+          JWT_SECRET_KEY: 'test-secret-key-for-ci-only'
+          FLASK_ENV: 'development'
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
