@@ -60,13 +60,6 @@ def _get_or_404(model, ident):
     return instance
 
 
-logger.info(
-    "backend.start version=%s db=%s skip_init_db=%s",
-    APP_VERSION,
-    _mask_db_uri(app.config.get('SQLALCHEMY_DATABASE_URI', '')),
-    os.environ.get('COSTOS_EMBUTIDOS_SKIP_INIT_DB'),
-)
-
 
 @app.before_request
 def _log_request_start():
@@ -186,8 +179,26 @@ limiter = Limiter(
 # Configuración
 basedir = os.path.abspath(os.path.dirname(__file__))
 default_db_uri = f'sqlite:///{os.path.join(basedir, "costos_embutidos.db")}'
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('COSTOS_EMBUTIDOS_DATABASE_URI', default_db_uri)
+
+# Si la URI es una ruta relativa de SQLite, convertirla a absoluta
+db_uri = os.environ.get('COSTOS_EMBUTIDOS_DATABASE_URI', default_db_uri)
+if db_uri.startswith('sqlite:///') and not db_uri.startswith('sqlite:////'):  # ruta relativa
+    # Extraer la ruta relativa y convertirla a absoluta
+    relative_path = db_uri.replace('sqlite:///', '')
+    if not os.path.isabs(relative_path):
+        # Construir ruta absoluta desde el directorio actual o basedir
+        absolute_path = os.path.abspath(relative_path)
+        db_uri = f'sqlite:///{absolute_path}'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+logger.info(
+    "backend.start version=%s db=%s skip_init_db=%s",
+    APP_VERSION,
+    _mask_db_uri(app.config.get('SQLALCHEMY_DATABASE_URI', '')),
+    os.environ.get('COSTOS_EMBUTIDOS_SKIP_INIT_DB'),
+)
 
 db.init_app(app)
 
