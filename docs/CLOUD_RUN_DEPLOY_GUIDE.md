@@ -202,16 +202,15 @@ project = costos-embutidos
 ### 3.4 Configurar la Región por Defecto
 
 ```bash
-# Establecer la región (us-central1 tiene buen tier gratuito)
+# Establecer la región para Cloud Run (us-central1 tiene buen tier gratuito)
 gcloud config set run/region us-central1
-
-# También configurar para compute (necesario para Cloud SQL)
-gcloud config set compute/region us-central1
 ```
 
 > 💡 **Regiones recomendadas**:
 > - `us-central1` - Iowa, USA (mejor tier gratuito)
 > - `southamerica-east1` - São Paulo, Brasil (menor latencia para LATAM)
+
+> ℹ️ **Nota**: El comando `gcloud config set compute/region` solo es necesario si vas a usar Cloud SQL. Si usas SQLite + Cloud Storage (recomendado para tu caso), **no lo necesitas**.
 
 ---
 
