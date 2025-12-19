@@ -28,12 +28,19 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copiar el resto del código del backend
 COPY . .
 
-# Crear directorio para base de datos y logs si no existen
-RUN mkdir -p instance logs
+# Crear directorios para datos persistentes y logs
+# instance/ contendrá la base de datos SQLite
+# logs/ contendrá los archivos de log
+# models/ contendrá los modelos ML entrenados
+RUN mkdir -p /app/instance /app/logs /app/backend/models
 
 # Usuario no-root para seguridad
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
+
+# Configurar permisos para directorios de datos
+RUN chmod -R 755 /app/instance /app/logs /app/backend/models
+
 USER appuser
 
 # Exponer el puerto que usará Gunicorn

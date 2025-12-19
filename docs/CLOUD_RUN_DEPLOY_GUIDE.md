@@ -324,7 +324,27 @@ gcloud artifacts docker images list us-central1-docker.pkg.dev/costos-embutidos/
 
 ## 🚀 Paso 6: Desplegar el Backend en Cloud Run
 
-### 6.1 Crear Secrets para Variables de Entorno
+### 6.1 Crear Bucket para Persistencia de SQLite
+
+**¿Por qué?** Cloud Run es stateless, el sistema de archivos se resetea en cada deploy. Para persistir la base de datos SQLite, usamos Cloud Storage:
+
+```bash
+# Crear bucket para datos persistentes
+gsutil mb -p costos-embutidos -l us-central1 gs://costos-embutidos-data
+
+# Crear estructura de carpetas
+gsutil -m cp /dev/null gs://costos-embutidos-data/instance/.keep
+gsutil -m cp /dev/null gs://costos-embutidos-data/logs/.keep
+gsutil -m cp /dev/null gs://costos-embutidos-data/models/.keep
+
+# Configurar permisos (el servicio Cloud Run necesita acceso)
+# El servicio por defecto usa la Compute Engine default service account
+gsutil iam ch serviceAccount:$(gcloud projects describe costos-embutidos --format='value(projectNumber)')-compute@developer.gserviceaccount.com:roles/storage.objectAdmin gs://costos-embutidos-data
+```
+
+**Costo estimado**: ~$0.02/mes para almacenar 100 MB de datos
+
+### 6.2 Crear Secrets para Variables de Entorno
 
 Primero, guardamos las variables sensibles como secrets:
 
@@ -339,9 +359,45 @@ gcloud secrets add-iam-policy-binding jwt-secret \
     --role="roles/secretmanager.secretAccessor"
 ```
 
-### 6.2 Desplegar el Backend
+### 6.3 Desplegar el Backend con Persistencia
 
-#### Opción A: Con SQLite (Simple)
+#### Opción A: Con SQLite + Cloud Storage (Recomendado - Casi Gratis)
+
+**Ventajas**: Costo casi nulo (~$0.02/mes), simple, suficiente para 200 req/mes
+
+```bash
+gcloud run deploy costos-backend \
+    --image=us-central1-docker.pkg.dev/costos-embutidos/costos-repo/backend:latest \
+    --platform=managed \
+    --region=us-central1 \
+    --allow-unauthenticated \
+    --port=5000 \
+    --memory=512Mi \
+    --cpu=1 \
+    --min-instances=0 \
+    --max-instances=3 \
+    --execution-environment=gen2 \
+    --add-volume=name=data,type=cloud-storage,bucket=costos-embutidos-data \
+    --add-volume-mount=volume=data,mount-path=/app/data \
+    --set-env-vars="FLASK_ENV=production,COSTOS_LOG_LEVEL=INFO,SQLALCHEMY_DATABASE_URI=sqlite:////app/data/instance/costos_embutidos.db" \
+    --set-secrets="JWT_SECRET_KEY=jwt-secret:latest"
+```
+
+**📝 Explicación de los parámetros nuevos**:
+- `--execution-environment=gen2`: Requerido para volúmenes (segunda generación de Cloud Run)
+- `--add-volume`: Monta el bucket `costos-embutidos-data` como volumen
+- `--add-volume-mount`: Monta el volumen en `/app/data` dentro del contenedor
+- `SQLALCHEMY_DATABASE_URI`: Apunta SQLite a la ruta persistente `/app/data/instance/costos_embutidos.db`
+
+**⚠️ Notas importantes**:
+- Los datos ahora persisten entre deploys y reinicios
+- La primera solicitud después de inactividad puede tardar ~3-5 segundos (cold start + montaje)
+- Los logs también se guardarán en `/app/data/logs/` (persistentes)
+- Los modelos ML se guardan en `/app/data/models/` (persistentes)
+
+#### Opción B: SQLite Sin Persistencia (Solo para Testing)
+
+**Solo si los datos NO son críticos**:
 
 ```bash
 gcloud run deploy costos-backend \
@@ -358,7 +414,11 @@ gcloud run deploy costos-backend \
     --set-secrets="JWT_SECRET_KEY=jwt-secret:latest"
 ```
 
-#### Opción B: Con Cloud SQL PostgreSQL (Producción)
+⚠️ **Datos se perderán en cada nuevo deploy**
+
+#### Opción C: Con Cloud SQL PostgreSQL (Solo para Alto Tráfico)
+
+**Solo considerar si tienes > 10,000 req/mes** - Costo: ~$7-9/mes
 
 ```bash
 # Primero, crear el secret de la base de datos
@@ -738,7 +798,10 @@ Si quieres eliminar todo para evitar cargos:
 gcloud run services delete costos-backend --region=us-central1 --quiet
 gcloud run services delete costos-frontend --region=us-central1 --quiet
 
-# Eliminar instancia de Cloud SQL
+# Eliminar bucket de datos
+gsutil -m rm -r gs://costos-embutidos-data
+
+# Eliminar instancia de Cloud SQL (si la creaste)
 gcloud sql instances delete costos-db --quiet
 
 # Eliminar imágenes de Artifact Registry

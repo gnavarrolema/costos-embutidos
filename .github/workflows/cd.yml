@@ -129,7 +129,10 @@ jobs:
             --cpu=1 \
             --min-instances=0 \
             --max-instances=3 \
-            --set-env-vars="FLASK_ENV=production,COSTOS_LOG_LEVEL=INFO" \
+            --execution-environment=gen2 \
+            --add-volume=name=data,type=cloud-storage,bucket=${{ secrets.GCP_PROJECT_ID }}-data \
+            --add-volume-mount=volume=data,mount-path=/app/data \
+            --set-env-vars="FLASK_ENV=production,COSTOS_LOG_LEVEL=INFO,SQLALCHEMY_DATABASE_URI=sqlite:////app/data/instance/costos_embutidos.db" \
             --set-secrets="JWT_SECRET_KEY=jwt-secret:latest"
 
       - name: Deploy Frontend to Cloud Run
