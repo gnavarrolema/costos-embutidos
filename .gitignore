@@ -65,3 +65,7 @@ instance/
 *.tmp
 *.temp
 .cache/
+
+# Modelos ML entrenados (generados en runtime)
+backend/models/*.pkl
+backend/models/*.meta.json
