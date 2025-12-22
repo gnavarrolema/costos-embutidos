@@ -113,6 +113,8 @@ export function AuthProvider({ children }) {
             setUser(null)
             localStorage.removeItem(TOKEN_KEY)
             localStorage.removeItem(USER_KEY)
+            // Forzar redirección a la página de inicio
+            window.location.href = '/login'
         }
     }
 
