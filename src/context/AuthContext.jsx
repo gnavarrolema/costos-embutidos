@@ -2,6 +2,12 @@ import { createContext, useContext, useState, useEffect } from 'react'
 
 const AuthContext = createContext(null)
 
+// En producción (Cloud Run), VITE_API_URL apuntará al backend
+// En desarrollo, usará el proxy configurado en vite.config.js
+const API_BASE = import.meta.env.VITE_API_URL
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : '/api'
+
 const TOKEN_KEY = 'costos_embutidos_token'
 const USER_KEY = 'costos_embutidos_user'
 
@@ -15,7 +21,7 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         const savedToken = localStorage.getItem(TOKEN_KEY)
         const savedUser = localStorage.getItem(USER_KEY)
-        
+
         if (savedToken && savedUser) {
             // Verificar que el token siga siendo válido
             verifyToken(savedToken).then(isValid => {
@@ -36,7 +42,7 @@ export function AuthProvider({ children }) {
 
     const verifyToken = async (tokenToVerify) => {
         try {
-            const response = await fetch('/api/auth/verify', {
+            const response = await fetch(`${API_BASE}/auth/verify`, {
                 headers: {
                     'Authorization': `Bearer ${tokenToVerify}`
                 }
@@ -59,9 +65,9 @@ export function AuthProvider({ children }) {
     const login = async (username, password) => {
         setError(null)
         setLoading(true)
-        
+
         try {
-            const response = await fetch('/api/auth/login', {
+            const response = await fetch(`${API_BASE}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -80,7 +86,7 @@ export function AuthProvider({ children }) {
             setUser(data.user)
             localStorage.setItem(TOKEN_KEY, data.token)
             localStorage.setItem(USER_KEY, JSON.stringify(data.user))
-            
+
             return { success: true }
         } catch (err) {
             setError(err.message)
@@ -93,7 +99,7 @@ export function AuthProvider({ children }) {
     const logout = async () => {
         try {
             if (token) {
-                await fetch('/api/auth/logout', {
+                await fetch(`${API_BASE}/auth/logout`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -112,15 +118,15 @@ export function AuthProvider({ children }) {
 
     const changePassword = async (currentPassword, newPassword) => {
         try {
-            const response = await fetch('/api/auth/change-password', {
+            const response = await fetch(`${API_BASE}/auth/change-password`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ 
-                    current_password: currentPassword, 
-                    new_password: newPassword 
+                body: JSON.stringify({
+                    current_password: currentPassword,
+                    new_password: newPassword
                 })
             })
 
@@ -168,15 +174,15 @@ export function useAuth() {
 export function withAuth(Component) {
     return function AuthenticatedComponent(props) {
         const { isAuthenticated, loading } = useAuth()
-        
+
         if (loading) {
             return <div className="auth-loading">Cargando...</div>
         }
-        
+
         if (!isAuthenticated) {
             return null
         }
-        
+
         return <Component {...props} />
     }
 }

@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "costos-embutidos",
+  "private_key_id": "2ad2aa2c55d6eb2774abe43142495ddc3afc85c9",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCy9UQPihnICi1V\npfryka4mbTENLcDCFUHRdUsME7+QKktodgrPIQDqDfKzMAUyB/941C83lK++ihob\nXkpZC6isl93ApB+e/bwC+ygwHit0LvTpFGgIyO9DJ2TFfv/90PfeyxZsiN2+/dE5\nZxGDkJGABYACujrVgu0aPMCpVA7O7Im50yeFwzyOaE3MwZTeIVkZEpdGU5TMOkpx\nZgdL3K99wAXdB+2qmcZlc2klcQ7sVs+7AIZjkXWr4CqjR0ZJL0jVV1CAuZg0gk75\nnvh6+qnkSGJ5yA2jc2X/lobmdxaiGR4dzsPjsBsveY+FCbw0ssSvnhpfkSdO+6qM\n9RayrZmPAgMBAAECggEAV7VNfjA5IomaXnfS3j/4Em1BtSvPZU/1yiqqdWjYYlfY\nTYJNGecbA5uCb8ABS9wPobCc06jT2Zbl5LP5zFqieLSVwmyt8sZ49x0RPUQMGA1L\ni1CtDGEuosMT6Jet70ATu+XdP6R0yb6sZG3Xb5vTM+N+MdgELdDVVB6iblr8Rv1i\nlCFc/j3HofhcMPyEyEWNK26C4xDOXz6Ap07cs4GDqDH9QaSSGSHYZ67o/dmGKB8Q\nyqTt1xWDtVGh4f61dO3h4UiMMuf4K5Fn2xyVlbCB69HRR1fP4bwlnr13Ae/cRj+6\neTJR/IqWKLfKNiwm0i9f6ASBvfI1TsXEhC2LTHAigQKBgQD7nXkOgTj5Fa8OqTsL\nkgJIVgi1kIX3Dfikbvps3Y0Ct0obl6Ou4cp8+XwN3hZK2q/L2OaqiT1RNEkxXfQp\nhouayywY6X86FGDBQiVs0mrIJL+6hmmMmZvfuWN7d7UH9I0GgZcUzhMYob3Jcd2r\n7/L9JLLq3L3r+xtSTE7JN+lJCQKBgQC2E6Yn0DvrGdjzUPs8jggRdJVXFNdcMlOA\nmWj1BCnfEadJT0KMt/IGNKCSldL8rO6s1gEt8eS620TreDN9xoCOnLxbZZa7kh98\nZsgoPLGdTFoR6Xo/CJkr5uqAsZamgfd1tsSBocl+Wdk1OfOou+7BK+E5kNIvhijA\nOyZWtYbr1wKBgQCSGZ//Qh141JRvaOh2EXPt2Lb55k9DYwNrR1119Tc5yn/ngadz\nlnvjEWJtEvXSxSSqsulNQJ8wFbIiTjHGIu/RFAQo+vv7F3YPAX+FrrB+QohpoD6N\ne2w8/gK74IhndCKnEnxNglMoTFJNNCbI/W0UfEi/gylsasQ0h0aAJEz7MQKBgBJc\nfugK7s/xplg7NWrQ4+1mtVy3xFQO2y7fyZ7T0akmLZmN/acVMboAeqTtqP5ELjmN\nx0ar2yYg0J1yXLb1WqeHFNOetgmqXbR85PhxznOPbJHb2rEam9+6hLF/tzKJbrwX\nN0/fUeOFCgt9EZ5VfWlLlIXqndefDuL71Azwd2+3AoGBAPqSah+c630JncuF8Zcx\n2RC9e4VzR40WZVA1KtwEGfE8oBdesU2dnst9PgVPGGyZqRTyFf0HQeB17B6h7GyK\nRU4hs+/K/KQmBnt6vPToHX1iUybs9X9X04gRb/1FghKhf+ZN2w/TSSa4rvRkWl3H\njSC0rzT9jZKKlVm8FeKHAPo4\n-----END PRIVATE KEY-----\n",
+  "client_email": "github-actions@costos-embutidos.iam.gserviceaccount.com",
+  "client_id": "117703787608203345475",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/github-actions%40costos-embutidos.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
