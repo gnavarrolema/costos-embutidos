@@ -7,3 +7,5 @@ Werkzeug==3.0.1
 openpyxl==3.1.2
 python-dotenv==1.0.0
 xlsxwriter>=3.1.0
+reportlab>=4.0.0
+markdown>=3.5.0

@@ -2037,6 +2037,327 @@ def health_check():
         return jsonify({'status': 'error', 'version': APP_VERSION}), 500
 
 
+# ===== DESCARGA DE GUÍA DE USUARIO =====
+@app.route('/api/download-guide', methods=['GET'])
+def download_user_guide():
+    """
+    Descarga la guía de usuario como PDF.
+    Convierte el archivo USER_GUIDE.md a un PDF formateado.
+    """
+    try:
+        import markdown
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch, cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, ListFlowable, ListItem
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+        import re
+        import html
+        
+        # Ruta al archivo USER_GUIDE.md
+        guide_path = os.path.join(os.path.dirname(basedir), 'USER_GUIDE.md')
+        
+        if not os.path.exists(guide_path):
+            logger.error(f"USER_GUIDE.md no encontrado en: {guide_path}")
+            return jsonify({'error': 'Guía de usuario no encontrada'}), 404
+        
+        # Leer el contenido del archivo Markdown
+        with open(guide_path, 'r', encoding='utf-8') as f:
+            md_content = f.read()
+        
+        # Crear PDF en memoria
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2*cm,
+            bottomMargin=2*cm
+        )
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        
+        # Estilo personalizado para título principal
+        styles.add(ParagraphStyle(
+            name='MainTitle',
+            parent=styles['Heading1'],
+            fontSize=28,
+            spaceAfter=30,
+            textColor=colors.HexColor('#0d9488'),
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        ))
+        
+        # Estilo para subtítulos
+        styles.add(ParagraphStyle(
+            name='SubTitle',
+            parent=styles['Heading2'],
+            fontSize=18,
+            spaceBefore=25,
+            spaceAfter=15,
+            textColor=colors.HexColor('#134e4a'),
+            borderPadding=(0, 0, 5, 0),
+            borderWidth=0,
+            fontName='Helvetica-Bold'
+        ))
+        
+        # Estilo para encabezados de sección
+        styles.add(ParagraphStyle(
+            name='SectionHeader',
+            parent=styles['Heading3'],
+            fontSize=14,
+            spaceBefore=18,
+            spaceAfter=10,
+            textColor=colors.HexColor('#0f766e'),
+            fontName='Helvetica-Bold'
+        ))
+        
+        # Estilo para texto normal
+        styles.add(ParagraphStyle(
+            name='NormalText',
+            parent=styles['Normal'],
+            fontSize=11,
+            spaceBefore=6,
+            spaceAfter=6,
+            alignment=TA_JUSTIFY,
+            leading=16,
+            textColor=colors.HexColor('#334155')
+        ))
+
+        # Estilo para la portada
+        styles.add(ParagraphStyle(
+            name='CoverTitle',
+            parent=styles['Heading1'],
+            fontSize=36,
+            spaceAfter=10,
+            textColor=colors.white,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        ))
+
+        styles.add(ParagraphStyle(
+            name='CoverSubtitle',
+            fontSize=18,
+            spaceAfter=40,
+            textColor=colors.HexColor('#ccfbf1'),
+            alignment=TA_CENTER,
+            fontName='Helvetica'
+        ))
+
+        styles.add(ParagraphStyle(
+            name='CoverVersion',
+            fontSize=12,
+            textColor=colors.white,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Oblique'
+        ))
+        
+        # Estilo para código
+        styles.add(ParagraphStyle(
+            name='CodeBlock',
+            parent=styles['Normal'],
+            fontSize=9,
+            fontName='Courier',
+            backColor=colors.HexColor('#f1f5f9'),
+            spaceBefore=6,
+            spaceAfter=6,
+            leftIndent=10,
+            rightIndent=10
+        ))
+        
+        # Estilo para notas/tips
+        styles.add(ParagraphStyle(
+            name='Note',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#0d9488'),
+            backColor=colors.HexColor('#f0fdfa'),
+            spaceBefore=8,
+            spaceAfter=8,
+            leftIndent=15,
+            rightIndent=15,
+            borderPadding=10
+        ))
+        
+        # Lista para almacenar los elementos del documento
+        elements = []
+
+        # --- PÁGINA DE PORTADA ---
+        elements.append(Spacer(1, 5*cm))
+        elements.append(Paragraph("SISTEMA DE COSTEO", styles['CoverTitle']))
+        elements.append(Paragraph("DE EMBUTIDOS", styles['CoverTitle']))
+        elements.append(Spacer(1, 0.5*cm))
+        elements.append(Paragraph("Guía Completa de Usuario", styles['CoverSubtitle']))
+        elements.append(Spacer(1, 8*cm))
+        elements.append(Paragraph(f"Versión {APP_VERSION}", styles['CoverVersion']))
+        elements.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y')}", styles['CoverVersion']))
+        elements.append(PageBreak())
+        
+        # Funciones para encabezado y pie de página
+        def add_header_footer(canvas, doc):
+            canvas.saveState()
+            
+            # Fondo de la portada si es la página 1
+            if doc.page == 1:
+                canvas.linearGradient(0, 0, A4[0], A4[1], (colors.HexColor('#134e4a'), colors.HexColor('#0d9488')))
+            else:
+                # Pie de página para el resto de páginas
+                canvas.setFont('Helvetica', 9)
+                canvas.setFillColor(colors.HexColor('#64748b'))
+                canvas.drawString(2*cm, 1.5*cm, f"Sistema de Costeo de Embutidos v{APP_VERSION}")
+                canvas.drawRightString(A4[0]-2*cm, 1.5*cm, f"Página {doc.page}")
+                
+                # Línea sutil en el pie
+                canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+                canvas.setLineWidth(0.5)
+                canvas.line(2*cm, 1.8*cm, A4[0]-2*cm, 1.8*cm)
+                
+            canvas.restoreState()
+        
+        # Procesar el contenido Markdown
+        lines = md_content.split('\n')
+        current_code_block = []
+        in_code_block = False
+        
+        def clean_text(text):
+            """Limpia y escapa texto para ReportLab"""
+            # Remover emojis comunes
+            text = re.sub(r'[📚📑📋📦🌭📊💰📈🎯🏠✅❌💡⚠️🔧📥🚀🔮💾🔄📝🧮📌🔗✓🟢🟡🔴💼🧠🕒📅📂🛑📖🎓💻🌐➜]', '', text)
+            
+            # Remover caracteres de diagramas de caja Unicode
+            text = re.sub(r'[┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬▀▄█▌▐░▒▓■□▪▫●○◆◇★☆♦♠♣♥]', '', text)
+            
+            # Remover otros caracteres Unicode problemáticos
+            text = re.sub(r'[→←↑↓↔↕⇒⇐⇑⇓∞≈≠≤≥±×÷√∑∏∫∂∇]', '', text)
+            
+            # Remover flechas y símbolos adicionales
+            text = re.sub(r'[▶◀▷◁△▽○●◎◉⊕⊗⊙]', '', text)
+            
+            # Limpiar líneas que son solo caracteres de caja (diagramas)
+            if re.match(r'^[\s\-\=\|\+\_\[\]]*$', text.strip()):
+                return ''
+            
+            # Escape HTML characters
+            text = html.escape(text)
+            # Convertir markdown bold a tags de ReportLab
+            text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', text)
+            # Convertir markdown italic
+            text = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', text)
+            # Convertir backticks a código inline
+            text = re.sub(r'`([^`]+)`', r'<font name="Courier" size="9">\1</font>', text)
+            return text
+        
+        def is_box_diagram_line(text):
+            """Detecta si una línea es parte de un diagrama de cajas ASCII"""
+            # Líneas que son principalmente caracteres de caja
+            box_chars = set('┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬ ')
+            if not text.strip():
+                return False
+            return len([c for c in text if c in box_chars]) > len(text) * 0.5
+        
+        for line in lines:
+            # Saltar líneas que son diagramas de caja
+            if is_box_diagram_line(line):
+                continue
+                
+            # Detectar bloques de código
+            if line.strip().startswith('```'):
+                if in_code_block:
+                    # Fin del bloque de código
+                    if current_code_block:
+                        # Filtrar líneas de diagramas dentro del bloque de código
+                        filtered_code = [l for l in current_code_block if not is_box_diagram_line(l)]
+                        if filtered_code:
+                            code_text = '\n'.join(filtered_code)
+                            # Limpiar caracteres problemáticos del código
+                            code_text = re.sub(r'[┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬]', '', code_text)
+                            if code_text.strip():
+                                elements.append(Paragraph(code_text.replace('\n', '<br/>'), styles['CodeBlock']))
+                    current_code_block = []
+                    in_code_block = False
+                else:
+                    # Inicio del bloque de código
+                    in_code_block = True
+                continue
+            
+            if in_code_block:
+                # Limpiar caracteres de caja en bloques de código
+                cleaned_line = re.sub(r'[┌┐└┘├┤┬┴┼─│═║╔╗╚╝╠╣╦╩╬]', '', line)
+                if cleaned_line.strip():  # Solo agregar si hay contenido después de limpiar
+                    current_code_block.append(html.escape(cleaned_line))
+                continue
+            
+            # Procesar líneas normales
+            stripped = line.strip()
+            
+            if not stripped:
+                elements.append(Spacer(1, 6))
+                continue
+            
+            # Encabezados
+            if stripped.startswith('# '):
+                # Si es el título principal de la primera página de contenido, le damos espacio
+                text = clean_text(stripped[2:])
+                elements.append(Paragraph(text, styles['MainTitle']))
+                elements.append(Spacer(1, 0.5*cm))
+            elif stripped.startswith('## '):
+                text = clean_text(stripped[3:])
+                elements.append(Paragraph(text, styles['SubTitle']))
+            elif stripped.startswith('### '):
+                text = clean_text(stripped[4:])
+                elements.append(Paragraph(text, styles['SectionHeader']))
+            elif stripped.startswith('#### '):
+                text = clean_text(stripped[5:])
+                elements.append(Paragraph(f"<b>{text}</b>", styles['NormalText']))
+            elif stripped.startswith('> '):
+                # Citas/notas
+                text = clean_text(stripped[2:])
+                elements.append(Paragraph(text, styles['Note']))
+            elif stripped.startswith('---'):
+                # Linea horizontal
+                elements.append(Spacer(1, 0.3*cm))
+                # elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#e2e8f0')))
+                elements.append(Spacer(1, 0.3*cm))
+            elif stripped.startswith('- ') or stripped.startswith('* '):
+                # Listas simples (conversión básica)
+                text = clean_text(stripped[2:])
+                elements.append(Paragraph(f"• {text}", styles['NormalText']))
+            elif re.match(r'^\d+\.', stripped):
+                # Listas enumeradas
+                text = clean_text(re.sub(r'^\d+\.\s*', '', stripped))
+                elements.append(Paragraph(f"{stripped.split('.')[0]}. {text}", styles['NormalText']))
+            else:
+                # Texto normal
+                text = clean_text(line)
+                if text:
+                    elements.append(Paragraph(text, styles['NormalText']))
+        
+        # Generar el PDF
+        doc.build(elements, onFirstPage=add_header_footer, onLaterPages=add_header_footer)
+        
+        output.seek(0)
+        logger.info("user_guide.download success")
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Guia_Usuario_Costos_Embutidos_v{APP_VERSION}.pdf'
+        )
+        
+    except ImportError as e:
+        logger.error(f"Dependencias faltantes para generar PDF: {e}")
+        return jsonify({
+            'error': 'No se puede generar el PDF. Faltan dependencias del servidor.',
+            'details': str(e)
+        }), 500
+    except Exception as e:
+        logger.exception("download_guide.error")
+        return jsonify({'error': f'Error al generar la guía: {str(e)}'}), 500
+
+
 # ===== EXPORTACIÓN A EXCEL =====
 @app.route('/api/exportar/costeo/<int:producto_id>', methods=['GET'])
 def exportar_costeo_producto(producto_id):

@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BarChart3, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { BarChart3, LogIn, AlertCircle, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import './Login.css'
 
 function Login() {
     const { login, loading, error, clearError } = useAuth()
+    const navigate = useNavigate()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [showPassword, setShowPassword] = useState(false)
@@ -151,6 +153,14 @@ function Login() {
 
                         <div className="form-footer">
                             <p>¿Problemas para acceder? Contacte al administrador</p>
+                            <button 
+                                type="button" 
+                                className="back-to-landing"
+                                onClick={() => navigate('/landing')}
+                            >
+                                <ArrowLeft size={16} />
+                                Volver al inicio
+                            </button>
                         </div>
                     </div>
                 </div>

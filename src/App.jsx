@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
     LayoutDashboard,
     LineChart,
@@ -19,6 +19,7 @@ import {
     Calculator
 } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import MateriasPrimas from './pages/MateriasPrimas'
@@ -144,13 +145,30 @@ function MainApp() {
 
 function App() {
     const { isAuthenticated, loading } = useAuth()
+    const location = useLocation()
 
     if (loading) {
         return <LoadingScreen />
     }
 
-    if (!isAuthenticated) {
+    // Si está en la landing page, mostrarla siempre (sin importar autenticación)
+    if (location.pathname === '/landing') {
+        return <Landing />
+    }
+
+    // Si está en login, mostrar login
+    if (location.pathname === '/login') {
+        // Si ya está autenticado, redirigir al dashboard
+        if (isAuthenticated) {
+            return <MainApp />
+        }
         return <Login />
+    }
+
+    // Para cualquier otra ruta, verificar autenticación
+    if (!isAuthenticated) {
+        // Si no está autenticado, mostrar landing por defecto
+        return <Landing />
     }
 
     return <MainApp />
