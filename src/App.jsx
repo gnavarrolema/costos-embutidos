@@ -77,9 +77,7 @@ function MainApp() {
     }
 
     const handleLogout = () => {
-        if (window.confirm('¿Está seguro que desea cerrar sesión?')) {
-            logout()
-        }
+        logout()
     }
 
     return (
