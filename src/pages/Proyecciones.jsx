@@ -256,7 +256,7 @@ function Proyecciones() {
             // Obtener costeo del producto usando la API correcta
             let mpBaseKg = 0
             try {
-                const costeo = await fetch(`/api/costeo/${prod.id}`).then(r => r.json()).catch(() => null)
+                const costeo = await costeoApi.getByProducto(prod.id)
                 if (costeo?.resumen) {
                     mpBaseKg = costeo.resumen.costo_por_kg || 0
                 }
