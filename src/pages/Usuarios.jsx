@@ -15,7 +15,9 @@ import {
 import { useAuth } from '../context/AuthContext'
 import './Usuarios.css'
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+const API_BASE = import.meta.env.VITE_API_URL
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : '/api'
 
 function Usuarios() {
     const { token, user: currentUser } = useAuth()
