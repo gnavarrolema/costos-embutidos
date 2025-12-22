@@ -109,9 +109,21 @@ jobs:
           docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }}
           docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:latest
 
+      - name: Get Backend URL
+        id: backend-url
+        run: |
+          BACKEND_URL=$(gcloud run services describe ${{ env.BACKEND_SERVICE }} --region=${{ env.GCP_REGION }} --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -z "$BACKEND_URL" ]; then
+            # If backend doesn't exist yet, construct expected URL
+            BACKEND_URL="https://${{ env.BACKEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.us-central1.run.app"
+          fi
+          echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
+          echo "Backend URL: $BACKEND_URL"
+
       - name: Build and Push Frontend Image
         run: |
-          docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }} \
+          docker build --build-arg VITE_API_URL=${{ steps.backend-url.outputs.url }} \
+                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }} \
                        -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:latest \
                        -f Dockerfile.frontend .
           docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }}
