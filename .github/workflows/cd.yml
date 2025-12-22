@@ -147,6 +147,18 @@ jobs:
             --set-env-vars="FLASK_ENV=production,COSTOS_LOG_LEVEL=INFO,SQLALCHEMY_DATABASE_URI=sqlite:////app/data/instance/costos_embutidos.db" \
             --set-secrets="JWT_SECRET_KEY=jwt-secret:latest"
 
+      - name: Get Frontend URL and Update Backend CORS
+        id: frontend-url
+        run: |
+          FRONTEND_URL=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} --region=${{ env.GCP_REGION }} --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -n "$FRONTEND_URL" ]; then
+            echo "Updating ALLOWED_ORIGINS to: $FRONTEND_URL"
+            gcloud run services update ${{ env.BACKEND_SERVICE }} \
+              --region=${{ env.GCP_REGION }} \
+              --update-env-vars="ALLOWED_ORIGINS=$FRONTEND_URL"
+          fi
+          echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy ${{ env.FRONTEND_SERVICE }} \
