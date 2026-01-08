@@ -62,6 +62,7 @@ instance/
 *.tmp
 *.temp
 .cache/
+:memory:
 
 # Modelos ML entrenados (generados en runtime)
 backend/models/*.pkl
