@@ -337,7 +337,7 @@ function Landing() {
             <section className="benefits-section reveal">
                 <div className="section-container">
                     <div className="benefits-grid">
-                        <div className="benefits-content reveal-left">
+                        <div className="benefits-content">
                             <span className="section-tag">Beneficios</span>
                             <h2 className="section-title">¿Por qué usar este sistema?</h2>
                             <div className="benefits-list">
@@ -352,7 +352,7 @@ function Landing() {
                                 ))}
                             </div>
                         </div>
-                        <div className="benefits-visual reveal-right">
+                        <div className="benefits-visual">
                             <div className="visual-card">
                                 <div className="card-header">
                                     <BarChart3 size={24} />
