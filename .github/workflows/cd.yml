@@ -132,11 +132,9 @@ jobs:
       - name: Get Frontend URL (for CORS configuration)
         id: frontend-url
         run: |
-          FRONTEND_URL=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} --region=${{ env.GCP_REGION }} --format="value(status.url)" 2>/dev/null || echo "")
-          if [ -z "$FRONTEND_URL" ]; then
-            # If frontend doesn't exist yet, construct expected URL
-            FRONTEND_URL="https://${{ env.FRONTEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.us-central1.run.app"
-          fi
+          # Always construct the URL in the correct format
+          # This ensures we use the proper regional URL format
+          FRONTEND_URL="https://${{ env.FRONTEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.${{ env.GCP_REGION }}.run.app"
           echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
           echo "Frontend URL for CORS: $FRONTEND_URL"
 
