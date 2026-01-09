@@ -112,11 +112,9 @@ jobs:
       - name: Get Backend URL
         id: backend-url
         run: |
-          BACKEND_URL=$(gcloud run services describe ${{ env.BACKEND_SERVICE }} --region=${{ env.GCP_REGION }} --format="value(status.url)" 2>/dev/null || echo "")
-          if [ -z "$BACKEND_URL" ]; then
-            # If backend doesn't exist yet, construct expected URL
-            BACKEND_URL="https://${{ env.BACKEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.us-central1.run.app"
-          fi
+          # Always construct the URL in the correct format
+          # This ensures we use the proper regional URL format
+          BACKEND_URL="https://${{ env.BACKEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.${{ env.GCP_REGION }}.run.app"
           echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
           echo "Backend URL: $BACKEND_URL"
 
