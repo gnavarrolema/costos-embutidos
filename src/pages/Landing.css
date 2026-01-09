@@ -489,7 +489,7 @@
    ===================================================== */
 
 .workflow-section {
-    padding: var(--spacing-6) 0;
+    padding: var(--spacing-4) 0;
     background: var(--color-neutral-900);
 }
 
@@ -558,7 +558,7 @@
    ===================================================== */
 
 .benefits-section {
-    padding: var(--spacing-8) 0;
+    padding: var(--spacing-4) 0;
     background: linear-gradient(180deg, rgba(15, 23, 42, 1) 0%, var(--color-neutral-900) 100%);
 }
 
