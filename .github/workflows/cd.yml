@@ -17,6 +17,7 @@ on:
 
 env:
   GCP_REGION: us-central1
+  GCP_PROJECT_NUMBER: "332269458514"
   BACKEND_SERVICE: costos-backend
   FRONTEND_SERVICE: costos-frontend
   ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
@@ -114,7 +115,7 @@ jobs:
         run: |
           # Always construct the URL in the correct format
           # This ensures we use the proper regional URL format
-          BACKEND_URL="https://${{ env.BACKEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.${{ env.GCP_REGION }}.run.app"
+          BACKEND_URL="https://${{ env.BACKEND_SERVICE }}-${{ env.GCP_PROJECT_NUMBER }}.${{ env.GCP_REGION }}.run.app"
           echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
           echo "Backend URL: $BACKEND_URL"
 
@@ -132,7 +133,7 @@ jobs:
         run: |
           # Always construct the URL in the correct format
           # This ensures we use the proper regional URL format
-          FRONTEND_URL="https://${{ env.FRONTEND_SERVICE }}-${{ secrets.GCP_PROJECT_ID }}.${{ env.GCP_REGION }}.run.app"
+          FRONTEND_URL="https://${{ env.FRONTEND_SERVICE }}-${{ env.GCP_PROJECT_NUMBER }}.${{ env.GCP_REGION }}.run.app"
           echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
           echo "Frontend URL for CORS: $FRONTEND_URL"
 
