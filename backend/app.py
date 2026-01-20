@@ -181,17 +181,28 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 default_db_uri = f'sqlite:///{os.path.join(basedir, "costos_embutidos.db")}'
 
 # Si la URI es una ruta relativa de SQLite, convertirla a absoluta
+# IMPORTANTE: Siempre resolverla relativa al directorio del backend (basedir), 
+# NO al directorio de trabajo actual, para evitar crear múltiples bases de datos
 db_uri = os.environ.get('COSTOS_EMBUTIDOS_DATABASE_URI', default_db_uri)
 if db_uri.startswith('sqlite:///') and not db_uri.startswith('sqlite:////'):  # ruta relativa
     # Extraer la ruta relativa y convertirla a absoluta
     relative_path = db_uri.replace('sqlite:///', '')
     if not os.path.isabs(relative_path):
-        # Construir ruta absoluta desde el directorio actual o basedir
-        absolute_path = os.path.abspath(relative_path)
+        # FIX: Resolver SIEMPRE relativo al directorio del backend (basedir)
+        # para garantizar que siempre se use la misma base de datos
+        absolute_path = os.path.join(basedir, relative_path)
         db_uri = f'sqlite:///{absolute_path}'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# ADVERTENCIA: Detectar si se está usando base de datos en memoria (pierde datos al reiniciar)
+if ':memory:' in db_uri:
+    logger.warning(
+        "⚠️  ADVERTENCIA: Usando base de datos en memoria (:memory:). "
+        "Los datos se perderán al reiniciar el servidor. "
+        "Esto solo debe usarse para tests."
+    )
 
 # Configuración SQLite para Cloud Storage FUSE (mejor compatibilidad)
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -203,12 +214,23 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_recycle': 3600,  # Reciclar conexiones cada hora
 }
 
+# Log de inicio con información de la base de datos
 logger.info(
     "backend.start version=%s db=%s skip_init_db=%s",
     APP_VERSION,
     _mask_db_uri(app.config.get('SQLALCHEMY_DATABASE_URI', '')),
     os.environ.get('COSTOS_EMBUTIDOS_SKIP_INIT_DB'),
 )
+
+# Verificar que la ruta de la BD es la esperada (solo para SQLite con archivo)
+if db_uri.startswith('sqlite:///') and ':memory:' not in db_uri:
+    db_file_path = db_uri.replace('sqlite:///', '')
+    expected_path = os.path.join(basedir, 'costos_embutidos.db')
+    if os.path.abspath(db_file_path) != expected_path:
+        logger.warning(
+            "⚠️  Base de datos en ubicación no estándar: %s (esperado: %s)",
+            db_file_path, expected_path
+        )
 
 db.init_app(app)
 
