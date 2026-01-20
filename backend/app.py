@@ -168,11 +168,12 @@ else:
     })
     logger.info(f"CORS configurado para producción: {allowed_origins}")
 
-# Rate Limiting
+# Rate Limiting - Límites más permisivos para uso normal
+# Los límites anteriores (50/hora) eran demasiado restrictivos
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["1000 per day", "300 per hour", "30 per minute"],
     storage_uri="memory://"
 )
 
