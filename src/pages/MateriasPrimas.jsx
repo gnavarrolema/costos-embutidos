@@ -373,7 +373,7 @@ function MateriasPrimas() {
                                             value={formData.costo_unitario}
                                             onChange={handleChange}
                                             placeholder="0.00"
-                                            step="0.001"
+                                            step="any"
                                             min="0"
                                             required
                                         />
