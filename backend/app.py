@@ -183,7 +183,12 @@ default_db_uri = f'sqlite:///{os.path.join(basedir, "costos_embutidos.db")}'
 # Si la URI es una ruta relativa de SQLite, convertirla a absoluta
 # IMPORTANTE: Siempre resolverla relativa al directorio del backend (basedir), 
 # NO al directorio de trabajo actual, para evitar crear múltiples bases de datos
-db_uri = os.environ.get('COSTOS_EMBUTIDOS_DATABASE_URI', default_db_uri)
+# NOTA: Soportamos ambas variables de entorno para compatibilidad:
+#   - SQLALCHEMY_DATABASE_URI (estándar Flask)
+#   - COSTOS_EMBUTIDOS_DATABASE_URI (legacy)
+db_uri = os.environ.get('SQLALCHEMY_DATABASE_URI') or \
+         os.environ.get('COSTOS_EMBUTIDOS_DATABASE_URI') or \
+         default_db_uri
 if db_uri.startswith('sqlite:///') and not db_uri.startswith('sqlite:////'):  # ruta relativa
     # Extraer la ruta relativa y convertirla a absoluta
     relative_path = db_uri.replace('sqlite:///', '')
