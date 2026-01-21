@@ -99,6 +99,16 @@ def _log_unhandled_exception(exc):
     if exc is not None:
         logger.exception("Unhandled exception during request")
 
+
+# Manejador explícito de preflight OPTIONS para todas las rutas /api/
+# Esto asegura que Cloud Run responda correctamente a las solicitudes preflight
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    """Handle preflight OPTIONS requests for all API routes"""
+    response = app.make_default_options_response()
+    return response
+
+
 # ===== HELPERS DE VALIDACIÓN =====
 def get_json_data():
     """Obtiene los datos JSON del request con validación"""
@@ -142,7 +152,7 @@ FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
 
 if FLASK_ENV == 'development':
     # Development: Permitir todos los orígenes
-    CORS(app)
+    CORS(app, supports_credentials=True)
     logger.info("CORS configurado para desarrollo (todos los orígenes permitidos)")
 else:
     # Production: Restrictivo - Solo dominios específicos
@@ -157,15 +167,14 @@ else:
         # Fallback seguro: solo localhost
         allowed_origins = ['http://localhost:5173']
     
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": allowed_origins,
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],
-            "expose_headers": ["Content-Type"],
-            "supports_credentials": True
-        }
-    })
+    CORS(app, 
+         origins=allowed_origins,
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+         allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+         expose_headers=["Content-Type", "Authorization"],
+         supports_credentials=True,
+         max_age=86400  # Cache preflight por 24 horas
+    )
     logger.info(f"CORS configurado para producción: {allowed_origins}")
 
 # Rate Limiting - Límites más permisivos para uso normal
