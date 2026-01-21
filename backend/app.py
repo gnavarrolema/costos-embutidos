@@ -177,12 +177,23 @@ else:
     )
     logger.info(f"CORS configurado para producción: {allowed_origins}")
 
-# Rate Limiting - Límites más permisivos para uso normal
-# Los límites anteriores (50/hora) eran demasiado restrictivos
+
+def _rate_limit_key_func():
+    """
+    Custom key function for rate limiting.
+    Excludes OPTIONS requests from rate limiting (preflight CORS).
+    """
+    if request.method == 'OPTIONS':
+        return None  # No rate limit for OPTIONS
+    return get_remote_address()
+
+
+# Rate Limiting - Límites permisivos para uso normal de aplicación
+# Cada acción puede generar múltiples requests (preflight + actual)
 limiter = Limiter(
     app=app,
-    key_func=get_remote_address,
-    default_limits=["1000 per day", "300 per hour", "30 per minute"],
+    key_func=_rate_limit_key_func,
+    default_limits=["5000 per day", "500 per hour", "100 per minute"],
     storage_uri="memory://"
 )
 
