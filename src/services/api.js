@@ -162,9 +162,13 @@ export const mlApi = {
     importExcel: (file) => {
         const formData = new FormData()
         formData.append('file', file)
-        return fetch(`${API_BASE_URL}/ml/import`, {
+        const token = getAuthToken()
+        return fetch(`${API_BASE}/ml/import`, {
             method: 'POST',
             body: formData,
+            headers: {
+                ...(token && { 'Authorization': `Bearer ${token}` }),
+            },
         }).then(async res => {
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'Error al importar')
