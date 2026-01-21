@@ -202,6 +202,34 @@
     gap: var(--spacing-2);
 }
 
+/* Import Section */
+.import-section {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.file-select-btn {
+    cursor: pointer;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 2px dashed var(--color-neutral-300);
+    color: var(--color-neutral-600);
+    transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-600);
+    background: var(--color-primary-50);
+}
+
 /* Responsive */
 @media (max-width: 992px) {
     .resumen-grid {

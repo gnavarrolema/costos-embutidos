@@ -159,7 +159,18 @@ export const costeoApi = {
 // ===== ML / PREDICCIONES =====
 export const mlApi = {
     getStatus: () => request('/ml/status'),
-    importExcel: () => request('/ml/import', { method: 'POST' }),
+    importExcel: (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        return fetch(`${API_BASE_URL}/ml/import`, {
+            method: 'POST',
+            body: formData,
+        }).then(async res => {
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Error al importar')
+            return data
+        })
+    },
     train: () => request('/ml/train', { method: 'POST' }),
     predict: (año, mes, productosIds = null) => request('/ml/predict', {
         method: 'POST',

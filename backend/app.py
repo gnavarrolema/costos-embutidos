@@ -1586,20 +1586,35 @@ def predict_producto(producto_id):
 
 @app.route('/api/ml/import', methods=['POST'])
 def import_excel_data():
-    """Importa datos desde el archivo Excel configurado"""
+    """Importa datos desde archivo Excel subido por el usuario"""
     try:
         import pandas as pd
+        from io import BytesIO
         
-        excel_path = os.path.join(basedir, '..', 'data', 'Histórico_Producción.xlsx')
-        
-        if not os.path.exists(excel_path):
+        # Verificar si se envió un archivo
+        if 'file' not in request.files:
             return jsonify({
                 'success': False,
-                'error': f'Archivo no encontrado: {excel_path}'
-            }), 404
+                'error': 'No se envió ningún archivo. Por favor seleccione un archivo Excel (.xlsx)'
+            }), 400
         
-        # Leer Excel
-        df = pd.read_excel(excel_path, engine='openpyxl')
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No se seleccionó ningún archivo'
+            }), 400
+        
+        # Validar extensión
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            return jsonify({
+                'success': False,
+                'error': 'El archivo debe ser un Excel (.xlsx o .xls)'
+            }), 400
+        
+        # Leer Excel desde el archivo subido
+        df = pd.read_excel(BytesIO(file.read()), engine='openpyxl')
         df.columns = [str(c).strip().lower() for c in df.columns]
         
         # Mapear columnas

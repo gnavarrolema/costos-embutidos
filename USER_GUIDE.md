@@ -1084,11 +1084,9 @@ Cálculo:
 
 ---
 
-#### 📂 Fuente de Datos Históricos
+#### 📂 Formato de Archivo Excel
 
-El sistema utiliza un **archivo Excel fijo** con datos históricos de producción:
-
-**Ubicación**: `data/Histórico_Producción.xlsx`
+El sistema acepta archivos Excel (.xlsx o .xls) con datos históricos de producción.
 
 **Formato Esperado del Archivo**:
 
@@ -1111,10 +1109,23 @@ El sistema utiliza un **archivo Excel fijo** con datos históricos de producció
 2. Verificar la sección **"Estado del Modelo"**:
    - 📊 **Datos Históricos**: Muestra cuántos registros hay en la base de datos
    - 📦 **Productos con Datos**: Cuántos productos tienen historial
-3. Clic en **"📥 Importar Excel"**
+3. Preparar su archivo Excel con el formato requerido (ver abajo)
+4. Clic en **"Seleccionar Excel"** y elija su archivo
+5. Clic en **"Importar"**
 
-**¿Qué hace este botón?**
-- Lee el archivo `data/Histórico_Producción.xlsx`
+**Formato del Archivo Excel:**
+
+| Columna | Tipo | Descripción | Ejemplo |
+|---------|------|-------------|---------|
+| **Codigo** | Texto | Código del producto | SAL-001 |
+| **Fecha** | Fecha | Fecha de producción | 15/01/2024 |
+| **Producto** | Texto | Nombre del producto (opcional) | Salchicha Parrillera |
+| **Producto Terminado** | Número | Cantidad en Kg | 1,500.50 |
+
+> 💡 **Nota**: El sistema acepta formato argentino (ej: `1.500,50`) o internacional (ej: `1500.5`)
+
+**¿Qué hace este proceso?**
+- Lee el archivo Excel que usted seleccionó
 - Importa los datos a la base de datos interna
 - Crea productos nuevos automáticamente si no existen
 - Actualiza registros existentes si la fecha ya está cargada
@@ -1209,12 +1220,12 @@ El sistema utiliza un **archivo Excel fijo** con datos históricos de producció
 
 #### 🔄 Mantenimiento de Datos Históricos
 
-##### **Actualizar el Archivo Excel con Nuevos Datos**
+##### **Actualizar con Nuevos Datos**
 
 **Cuándo**: Al final de cada mes, cuando tenga los datos reales de producción
 
 **Cómo**:
-1. Abrir el archivo `data/Histórico_Producción.xlsx` con Excel
+1. Abrir su archivo Excel de históricos con Excel
 2. Agregar nuevas filas con los datos del mes:
    ```
    Codigo    Fecha        Producto              Producto Terminado
@@ -1222,10 +1233,11 @@ El sistema utiliza un **archivo Excel fijo** con datos históricos de producció
    CER-002   15/03/2025   Cervelat              890,20
    ...
    ```
-3. Guardar el archivo (mantener el mismo nombre y formato)
+3. Guardar el archivo
 4. En la aplicación, ir a **Proyecciones ML**
-5. Clic en **"📥 Importar Excel"** nuevamente
-6. Clic en **"🚀 Entrenar Modelo"** para actualizar predicciones
+5. Clic en **"Seleccionar Excel"** y elegir el archivo actualizado
+6. Clic en **"Importar"**
+7. Clic en **"🚀 Entrenar Modelo"** para actualizar predicciones
 
 **Frecuencia Recomendada**: Mensual (cada vez que cierre un mes de producción)
 
@@ -1235,10 +1247,7 @@ El sistema utiliza un **archivo Excel fijo** con datos históricos de producció
 - ⚠️ Cambios en tendencias de producción no se reflejan
 
 ##### **Backup del Archivo**
-```bash
-# Antes de modificar, haga una copia de seguridad
-cp data/Histórico_Producción.xlsx data/Histórico_Producción_backup_YYYYMMDD.xlsx
-```
+Se recomienda mantener copias de seguridad de su archivo Excel de históricos.
 
 ---
 
@@ -1268,7 +1277,9 @@ El sistema usa diferentes métodos según disponibilidad de datos:
 
 | Error | Causa | Solución |
 |-------|-------|----------|
-| "No hay datos históricos" | Archivo Excel no importado | Haga clic en "📥 Importar Excel" |
+| "No se envió ningún archivo" | No seleccionó archivo | Haga clic en "Seleccionar Excel" primero |
+| "El archivo debe ser un Excel" | Formato incorrecto | Use archivos .xlsx o .xls |
+| "Columnas requeridas no encontradas" | Formato Excel incorrecto | Verifique que tiene columnas: Codigo, Fecha, Producto Terminado |
 | "Modelo no entrenado" | No se entrenó el modelo después de importar | Haga clic en "🚀 Entrenar Modelo" |
 | "No hay predicciones disponibles" | Productos sin suficientes datos | Verifique que los productos tienen ≥ 3 meses de historial |
 | "Costo $0" | Producto sin fórmula definida | Vaya a Formulación y defina ingredientes |

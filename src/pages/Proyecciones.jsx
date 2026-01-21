@@ -58,6 +58,7 @@ function Proyecciones() {
     const [guardando, setGuardando] = useState(false)
     const [error, setError] = useState(null)
     const [mensaje, setMensaje] = useState(null)
+    const [archivoSeleccionado, setArchivoSeleccionado] = useState(null)
 
     const mlMeta = mlStatus?.metadata || null
     const mlTrainedAtLabel = useMemo(() => {
@@ -136,12 +137,21 @@ function Proyecciones() {
     }
 
     async function handleImport() {
+        if (!archivoSeleccionado) {
+            setMensaje('⚠️ Seleccione un archivo Excel primero')
+            return
+        }
+        
         setImporting(true)
         setMensaje(null)
         try {
-            const result = await mlApi.importExcel()
+            const result = await mlApi.importExcel(archivoSeleccionado)
             if (result.success) {
                 setMensaje(`✅ Importación exitosa: ${result.productos_creados} productos creados, ${result.registros_importados} registros importados`)
+                setArchivoSeleccionado(null)
+                // Limpiar input file
+                const fileInput = document.getElementById('excel-file-input')
+                if (fileInput) fileInput.value = ''
                 await loadData()
             } else {
                 setMensaje(`❌ Error: ${result.error}`)
@@ -150,6 +160,20 @@ function Proyecciones() {
             setMensaje(`❌ Error: ${err.message}`)
         } finally {
             setImporting(false)
+        }
+    }
+
+    function handleFileChange(e) {
+        const file = e.target.files?.[0]
+        if (file) {
+            if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+                setMensaje('⚠️ Por favor seleccione un archivo Excel (.xlsx o .xls)')
+                setArchivoSeleccionado(null)
+                e.target.value = ''
+                return
+            }
+            setArchivoSeleccionado(file)
+            setMensaje(null)
         }
     }
 
@@ -444,14 +468,27 @@ function Proyecciones() {
                 </div>
 
                 <div className="status-actions">
-                    <button
-                        className="btn btn-secondary"
-                        onClick={handleImport}
-                        disabled={importing}
-                    >
-                        {importing ? <Clock size={18} className="spin" /> : <Upload size={18} />}
-                        {importing ? 'Importando...' : 'Importar Excel'}
-                    </button>
+                    <div className="import-section">
+                        <input
+                            type="file"
+                            id="excel-file-input"
+                            accept=".xlsx,.xls"
+                            onChange={handleFileChange}
+                            style={{ display: 'none' }}
+                        />
+                        <label htmlFor="excel-file-input" className="btn btn-outline file-select-btn">
+                            <Upload size={18} />
+                            {archivoSeleccionado ? archivoSeleccionado.name : 'Seleccionar Excel'}
+                        </label>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={handleImport}
+                            disabled={importing || !archivoSeleccionado}
+                        >
+                            {importing ? <Clock size={18} className="spin" /> : <Upload size={18} />}
+                            {importing ? 'Importando...' : 'Importar'}
+                        </button>
+                    </div>
                     <button
                         className="btn btn-primary"
                         onClick={handleTrain}
@@ -772,6 +809,34 @@ function Proyecciones() {
           gap: var(--spacing-3);
           padding: var(--spacing-4);
           border-top: 1px solid var(--color-neutral-100);
+          flex-wrap: wrap;
+        }
+        .import-section {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-2);
+        }
+        .file-select-btn {
+          cursor: pointer;
+          max-width: 220px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          padding: var(--spacing-2) var(--spacing-3);
+          border: 2px dashed var(--color-neutral-300);
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: var(--color-neutral-600);
+          font-size: var(--font-size-sm);
+          display: inline-flex;
+          align-items: center;
+          gap: var(--spacing-2);
+          transition: all 0.2s ease;
+        }
+        .file-select-btn:hover {
+          border-color: var(--color-primary-400);
+          color: var(--color-primary-600);
+          background: var(--color-primary-50);
         }
         .prediction-controls {
           display: flex;
