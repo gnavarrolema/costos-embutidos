@@ -481,6 +481,26 @@ h4 {
   background: var(--color-neutral-50);
 }
 
+/* Table number alignment */
+.table-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Ensure header alignment matches cells */
+.table th.text-right {
+  text-align: right;
+}
+
+.table th.text-center {
+  text-align: center;
+}
+
 /* Enhanced Categor Badge */
 .badge {
   display: inline-flex;
@@ -623,11 +643,11 @@ h4 {
     0 0 0 1px rgba(0, 0, 0, 0.05);
   max-width: 500px;
   width: 100%;
-  max-height: 90vh;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Header/Footer will be fixed */
+  /* Header/Footer will be fixed, body scrolls */
   animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
 }
@@ -652,17 +672,20 @@ h4 {
 .modal-body {
   padding: var(--spacing-6);
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .modal-footer {
-  padding: var(--spacing-5) var(--spacing-6);
+  padding: var(--spacing-4) var(--spacing-6);
   border-top: 1px solid var(--color-neutral-100);
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-3);
   background: var(--color-neutral-50);
   flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
 }
 
 .modal-close {

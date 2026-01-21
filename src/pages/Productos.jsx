@@ -235,7 +235,7 @@ function Productos() {
             </div>
 
             {showModal && (
-                <div className="modal-overlay" onClick={handleCloseModal}>
+                <div className="modal-overlay align-start" onClick={handleCloseModal}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3 className="modal-title">
@@ -243,7 +243,7 @@ function Productos() {
                             </h3>
                             <button className="modal-close" onClick={handleCloseModal}>×</button>
                         </div>
-                        <form onSubmit={handleSubmit}>
+                        <form onSubmit={handleSubmit} className="modal-form-container">
                             <div className="modal-body">
                                 <div className="form-group">
                                     <label className="form-label">Código *</label>
@@ -387,6 +387,13 @@ function Productos() {
           background-color: var(--color-neutral-100);
           color: var(--color-neutral-600);
           cursor: not-allowed;
+        }
+        .modal-form-container {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
         }
       `}</style>
         </div>
