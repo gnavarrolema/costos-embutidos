@@ -246,7 +246,7 @@ function Formulacion() {
                                         className="inline-input"
                                         value={item.cantidad}
                                         onChange={(e) => handleCantidadChange(item.id, e.target.value)}
-                                        step="0.001"
+                                        step="any"
                                         min="0"
                                     />
                                 </td>
@@ -481,7 +481,7 @@ function Formulacion() {
                                         value={newIngrediente.cantidad}
                                         onChange={(e) => setNewIngrediente(prev => ({ ...prev, cantidad: e.target.value }))}
                                         placeholder="0.00"
-                                        step="0.001"
+                                        step="any"
                                         min="0"
                                         required
                                     />
