@@ -181,19 +181,24 @@ else:
 def _rate_limit_key_func():
     """
     Custom key function for rate limiting.
-    Excludes OPTIONS requests from rate limiting (preflight CORS).
+    Excludes OPTIONS requests and API routes from rate limiting.
+    Only apply rate limiting to auth routes for security.
     """
+    # No rate limit for OPTIONS (CORS preflight)
     if request.method == 'OPTIONS':
-        return None  # No rate limit for OPTIONS
+        return None
+    # No rate limit for regular API operations
+    if request.path.startswith('/api/') and not request.path.startswith('/api/auth/'):
+        return None
     return get_remote_address()
 
 
-# Rate Limiting - Límites permisivos para uso normal de aplicación
-# Cada acción puede generar múltiples requests (preflight + actual)
+# Rate Limiting - Solo aplicado a rutas de autenticación para seguridad
+# Las rutas API normales no tienen rate limit para permitir uso fluido
 limiter = Limiter(
     app=app,
     key_func=_rate_limit_key_func,
-    default_limits=["5000 per day", "500 per hour", "100 per minute"],
+    default_limits=["10000 per day", "1000 per hour", "200 per minute"],
     storage_uri="memory://"
 )
 
