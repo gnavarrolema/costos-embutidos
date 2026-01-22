@@ -405,6 +405,45 @@ function Proyecciones() {
         return años
     }, [])
 
+    // Calcular si la proyección está muy lejana de los datos históricos
+    const proyeccionLejanaInfo = useMemo(() => {
+        const endYm = mlMeta?.data_range?.end_ym // formato "YYYY-MM"
+        if (!endYm) return null
+        
+        const [endYear, endMonth] = endYm.split('-').map(Number)
+        const targetYear = periodo.año
+        const targetMonth = periodo.mes
+        
+        // Calcular meses de diferencia
+        const mesesDiferencia = (targetYear - endYear) * 12 + (targetMonth - endMonth)
+        
+        if (mesesDiferencia <= 0) {
+            return null // Proyectando dentro o antes del rango de datos
+        }
+        
+        if (mesesDiferencia > 18) {
+            return {
+                nivel: 'alto',
+                meses: mesesDiferencia,
+                mensaje: `Proyección muy lejana (${mesesDiferencia} meses desde últimos datos). Confianza muy baja.`
+            }
+        } else if (mesesDiferencia > 12) {
+            return {
+                nivel: 'medio',
+                meses: mesesDiferencia,
+                mensaje: `Proyección lejana (${mesesDiferencia} meses). Confianza reducida.`
+            }
+        } else if (mesesDiferencia > 6) {
+            return {
+                nivel: 'bajo',
+                meses: mesesDiferencia,
+                mensaje: `Proyección a ${mesesDiferencia} meses. Considere actualizar datos históricos.`
+            }
+        }
+        
+        return null
+    }, [mlMeta?.data_range?.end_ym, periodo.año, periodo.mes])
+
     if (loading) {
         return (
             <div className="loading-container">
@@ -674,6 +713,26 @@ function Proyecciones() {
                         Importe datos históricos y entrene el modelo para generar predicciones.
                     </div>
                 )}
+
+                {/* Advertencia de proyección lejana */}
+                {proyeccionLejanaInfo && (
+                    <div className={`proyeccion-lejana-warning warning-${proyeccionLejanaInfo.nivel}`}>
+                        <AlertCircle size={18} />
+                        <div>
+                            <strong>
+                                {proyeccionLejanaInfo.nivel === 'alto' ? '⚠️ Advertencia:' : 
+                                 proyeccionLejanaInfo.nivel === 'medio' ? '⚡ Atención:' : '💡 Nota:'}
+                            </strong>
+                            <span> {proyeccionLejanaInfo.mensaje}</span>
+                            {proyeccionLejanaInfo.nivel !== 'bajo' && (
+                                <div style={{ marginTop: '4px', fontSize: '0.85em', opacity: 0.9 }}>
+                                    Último dato histórico: {mlMeta?.data_range?.end_ym} | 
+                                    Recomendación: actualice con datos más recientes para mejor precisión.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Resultados de Predicciones CON COSTOS */}
@@ -931,6 +990,38 @@ function Proyecciones() {
           margin: var(--spacing-4);
           margin-top: 0;
         }
+        
+        /* Advertencia de proyección lejana */
+        .proyeccion-lejana-warning {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--spacing-2);
+          padding: var(--spacing-3);
+          border-radius: var(--radius-md);
+          margin: var(--spacing-4);
+          margin-top: var(--spacing-2);
+          font-size: var(--font-size-sm);
+        }
+        .proyeccion-lejana-warning svg {
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
+        .warning-bajo {
+          background: #f0f9ff;
+          border: 1px solid #bae6fd;
+          color: #0369a1;
+        }
+        .warning-medio {
+          background: #fef3c7;
+          border: 1px solid #fcd34d;
+          color: #92400e;
+        }
+        .warning-alto {
+          background: #fee2e2;
+          border: 1px solid #fca5a5;
+          color: #991b1b;
+        }
+        
         .prediction-value {
           font-size: var(--font-size-lg);
           font-weight: 700;

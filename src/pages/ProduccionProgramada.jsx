@@ -55,7 +55,7 @@ function getMonthName(mesStr) {
 function getMonthOptions() {
     const options = []
     const now = new Date()
-    for (let i = -2; i <= 9; i++) {
+    for (let i = -2; i <= 12; i++) {
         const date = new Date(now.getFullYear(), now.getMonth() + i, 1)
         const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         const label = `${MESES[date.getMonth()]} ${date.getFullYear()}`

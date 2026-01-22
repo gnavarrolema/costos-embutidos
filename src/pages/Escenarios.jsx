@@ -34,7 +34,7 @@ function getMonthName(mesStr) {
 function getFutureMonthOptions() {
     const options = []
     const now = new Date()
-    for (let i = 1; i <= 12; i++) {
+    for (let i = 0; i <= 18; i++) {
         const date = new Date(now.getFullYear(), now.getMonth() + i, 1)
         const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         const label = `${MESES[date.getMonth()]} ${date.getFullYear()}`
