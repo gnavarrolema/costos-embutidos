@@ -247,7 +247,7 @@ function ProduccionProgramada() {
             const producto = productos.find(prod => prod.id === p.producto_id)
             if (!producto) return null
 
-            const costoData = productosConCosto[p.producto_id] || { costoNetoBatch: 0, costoPorKg: 0 }
+            const costoData = productosConCosto[p.producto_id] || { costoNetoBatch: 0, costoPorKg: 0, totalesPorCategoria: {}, ingredientes: [] }
             const pesoTotal = p.cantidad_batches * producto.peso_batch_kg
 
             // Costo variable (MP) con inflación
@@ -310,7 +310,7 @@ function ProduccionProgramada() {
 
         produccionConCostos.forEach(p => {
             // Totales por categoría
-            Object.entries(p.totalesPorCategoria).forEach(([cat, data]) => {
+            Object.entries(p.totalesPorCategoria || {}).forEach(([cat, data]) => {
                 if (!categorias[cat]) categorias[cat] = { cantidad: 0, costo: 0 }
                 categorias[cat].cantidad += (data.cantidad || 0) * p.cantidad_batches
                 categorias[cat].costo += (data.costo || 0) * p.cantidad_batches * factorInflacion
