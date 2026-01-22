@@ -10,10 +10,19 @@ import io
 import logging
 import time
 import uuid
+import shutil
 
 # Cargar variables de entorno desde archivo .env
+# IMPORTANTE: Buscar el .env en la raíz del proyecto (un nivel arriba de backend/)
 from dotenv import load_dotenv
-load_dotenv()  # Carga variables del archivo .env si existe
+_backend_dir = os.path.abspath(os.path.dirname(__file__))
+_project_root = os.path.dirname(_backend_dir)
+_env_path = os.path.join(_project_root, '.env')
+if os.path.exists(_env_path):
+    load_dotenv(_env_path)
+else:
+    # Fallback: intentar en el directorio actual
+    load_dotenv()
 
 
 from flask import g
@@ -265,9 +274,78 @@ if db_uri.startswith('sqlite:///') and ':memory:' not in db_uri:
 
 db.init_app(app)
 
+# ===== BACKUP AUTOMÁTICO DE LA BASE DE DATOS =====
+def _create_db_backup():
+    """Crea un backup de la base de datos si tiene datos significativos"""
+    if ':memory:' in db_uri:
+        return  # No hacer backup de BD en memoria
+    
+    db_path = db_uri.replace('sqlite:///', '')
+    if not os.path.exists(db_path):
+        return
+    
+    backup_dir = os.path.join(basedir, 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    # Crear backup con timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_path = os.path.join(backup_dir, f'costos_embutidos_{timestamp}.db')
+    
+    try:
+        shutil.copy2(db_path, backup_path)
+        logger.info(f"✅ Backup de BD creado: {backup_path}")
+        
+        # Mantener solo los últimos 10 backups
+        backups = sorted([f for f in os.listdir(backup_dir) if f.endswith('.db')])
+        while len(backups) > 10:
+            old_backup = os.path.join(backup_dir, backups.pop(0))
+            os.remove(old_backup)
+            logger.info(f"🗑️  Backup antiguo eliminado: {old_backup}")
+    except Exception as e:
+        logger.warning(f"⚠️  No se pudo crear backup: {e}")
+
+
+def _verify_db_contents():
+    """Verifica el contenido de la base de datos al iniciar"""
+    try:
+        with app.app_context():
+            productos = Producto.query.count()
+            materias = MateriaPrima.query.count()
+            costos = CostoIndirecto.query.count()
+            formulas = FormulaDetalle.query.count()
+            historico = ProduccionHistorica.query.count()
+            
+            logger.info(
+                "📊 Estado de la BD: Productos=%d, MP=%d, Costos=%d, Fórmulas=%d, Histórico=%d",
+                productos, materias, costos, formulas, historico
+            )
+            
+            if productos == 0 and materias == 0:
+                logger.warning(
+                    "⚠️  ADVERTENCIA: La base de datos está vacía. "
+                    "Si esto es inesperado, verifique la ruta de la BD o restaure un backup."
+                )
+            
+            return {
+                'productos': productos,
+                'materias_primas': materias,
+                'costos_indirectos': costos,
+                'formulas': formulas,
+                'historico': historico
+            }
+    except Exception as e:
+        logger.error(f"❌ Error verificando BD: {e}")
+        return None
+
+
 # Inicializar DB
 if os.environ.get('COSTOS_EMBUTIDOS_SKIP_INIT_DB') != '1':
     init_db(app)
+    
+    # Crear backup solo si hay datos
+    db_status = _verify_db_contents()
+    if db_status and (db_status['productos'] > 0 or db_status['materias_primas'] > 5):
+        _create_db_backup()
 
 # Inicializar rutas de autenticación
 init_auth_routes(app)
@@ -662,7 +740,20 @@ def create_producto():
     if error:
         return jsonify({'error': error}), 400
     
-    # Verificar si existe un producto con el mismo código
+    # Normalizar código (eliminar ceros iniciales para comparación)
+    codigo_normalizado = data['codigo'].lstrip('0') or '0'
+    
+    # Verificar si existe un producto con código equivalente (con o sin ceros iniciales)
+    # Esto previene duplicados como "05931" vs "5931"
+    productos_existentes = Producto.query.filter_by(activo=True).all()
+    for p in productos_existentes:
+        if p.codigo.lstrip('0') == codigo_normalizado:
+            return jsonify({
+                'error': f'Ya existe un producto con código equivalente: {p.codigo} ({p.nombre}). '
+                         f'Los códigos "{data["codigo"]}" y "{p.codigo}" se consideran duplicados.'
+            }), 400
+    
+    # Verificar si existe exactamente el mismo código (inactivo - para reactivar)
     existing = Producto.query.filter_by(codigo=data['codigo']).first()
     
     if existing:
@@ -740,7 +831,22 @@ def update_producto(id):
             return jsonify({'error': error}), 400
         producto.min_mo_kg = min_mo
     
-    producto.codigo = data.get('codigo', producto.codigo)
+    # Si se cambia el código, validar que no haya duplicados equivalentes
+    nuevo_codigo = data.get('codigo', producto.codigo)
+    if nuevo_codigo != producto.codigo:
+        codigo_normalizado = nuevo_codigo.lstrip('0') or '0'
+        productos_existentes = Producto.query.filter(
+            Producto.id != producto.id,
+            Producto.activo == True
+        ).all()
+        for p in productos_existentes:
+            if p.codigo.lstrip('0') == codigo_normalizado:
+                return jsonify({
+                    'error': f'Ya existe un producto con código equivalente: {p.codigo} ({p.nombre}). '
+                             f'Los códigos "{nuevo_codigo}" y "{p.codigo}" se consideran duplicados.'
+                }), 400
+    
+    producto.codigo = nuevo_codigo
     producto.nombre = data.get('nombre', producto.nombre)
     
     db.session.commit()

@@ -32,6 +32,27 @@ python scripts/seed_data.py
 
 ### Mantenimiento de Base de Datos
 
+#### `db_utils.py`
+Utilidad para backup, restauración y diagnóstico de la base de datos local.
+
+```bash
+python scripts/db_utils.py status    # Ver estado de la BD
+python scripts/db_utils.py backup    # Crear backup
+python scripts/db_utils.py list      # Listar backups disponibles
+python scripts/db_utils.py restore <archivo>  # Restaurar desde backup
+```
+
+#### `gcs_sync.py`
+Sincroniza la base de datos con Google Cloud Storage (producción).
+
+```bash
+python scripts/gcs_sync.py status    # Ver estado del bucket GCS
+python scripts/gcs_sync.py download  # Descargar BD de producción
+python scripts/gcs_sync.py upload    # Subir BD a producción (requiere confirmación)
+```
+
+> ⚠️ Requiere el archivo `gcp-key.json` con credenciales de servicio.
+
 #### `create_tables.py`
 Crea las tablas de la base de datos manualmente.
 
@@ -77,6 +98,7 @@ python scripts/migrate_historial.py
 2. **Credenciales**: Cambiar contraseñas por defecto antes de desplegar a producción
 3. **Backups**: Hacer backup de `costos_embutidos.db` antes de ejecutar scripts destructivos
 4. **Rutas**: Ejecutar desde el directorio `backend/` para que las rutas relativas funcionen correctamente
+5. **GCS Sync**: Antes de subir a producción, verificar siempre el estado con `gcs_sync.py status`
 
 ## 🔗 Ver También
 
