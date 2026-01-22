@@ -1,8 +1,8 @@
 // En producción (Cloud Run), VITE_API_URL apuntará al backend
 // En desarrollo, usará el proxy configurado en vite.config.js
-const API_BASE = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api` 
-  : '/api'
+const API_BASE = import.meta.env.VITE_API_URL
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : '/api'
 
 const TOKEN_KEY = 'costos_embutidos_token'
 
@@ -20,7 +20,7 @@ async function handleResponse(response) {
         window.location.reload() // Forzar recarga para mostrar login
         throw new Error('Sesión expirada. Por favor, inicie sesión nuevamente.')
     }
-    
+
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || errorData.message || 'Error en la solicitud')
@@ -32,7 +32,7 @@ async function handleResponse(response) {
 async function request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`
     const token = getAuthToken()
-    
+
     const config = {
         headers: {
             'Content-Type': 'application/json',
@@ -185,6 +185,10 @@ export const mlApi = {
         if (similarId) url += `&similar_id=${similarId}`
         return request(url)
     },
+    predictHibrido: (año, mes, mesBase) => request('/proyeccion-hibrida', {
+        method: 'POST',
+        body: JSON.stringify({ año, mes, mes_base: mesBase }),
+    }),
 }
 
 // ===== PRODUCCIÓN HISTÓRICA =====

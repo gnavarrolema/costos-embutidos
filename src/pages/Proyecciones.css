@@ -191,8 +191,13 @@
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .btn {
@@ -241,9 +246,65 @@
     .status-grid {
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     }
-    
+
     .prediction-controls {
         flex-direction: column;
         align-items: stretch;
     }
+}
+
+/* Origin Badges */
+.origen-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.origen-programado {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+.origen-ml {
+    background: #f3e8ff;
+    color: #7c3aed;
+    border: 1px solid #c4b5fd;
+}
+
+/* Mode Toggle Button Group */
+.btn-group {
+    display: inline-flex;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.btn-group .btn {
+    border-radius: 0;
+    margin: 0;
+}
+
+.btn-group .btn:first-child {
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.btn-group .btn:last-child {
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: var(--font-size-sm);
+}
+
+.mode-toggle {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-2);
 }

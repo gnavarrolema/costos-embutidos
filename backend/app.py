@@ -1736,6 +1736,198 @@ def import_excel_data():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ===== PROYECCIÓN HÍBRIDA (Producción Programada + ML) =====
+@app.route('/api/proyeccion-hibrida', methods=['POST'])
+def proyeccion_hibrida():
+    """
+    Genera proyección híbrida combinando producción programada + predicciones ML.
+    
+    Para productos con producción programada en el mes, usa esos datos.
+    Para productos sin programación, usa predicciones del modelo ML.
+    
+    Esto permite distribuir costos indirectos sobre el mix completo esperado.
+    
+    Body JSON:
+    - año: Año de la proyección
+    - mes: Mes de la proyección (1-12)
+    - mes_base: Mes base de costos indirectos (YYYY-MM)
+    """
+    try:
+        from predictor import get_predictor
+        predictor = get_predictor()
+        
+        data = get_json_data()
+        if not data:
+            data = {}
+        
+        año = data.get('año') or date.today().year
+        mes = data.get('mes') or date.today().month
+        mes_base = data.get('mes_base')
+        
+        # Validar mes_base si se proporciona
+        if mes_base:
+            _, _, error = validate_month_format(mes_base, 'mes_base')
+            if error:
+                return jsonify({'error': error}), 400
+        
+        mes_produccion = f"{año}-{mes:02d}"
+        
+        logger.info(
+            "proyeccion_hibrida.start año=%s mes=%s mes_base=%s",
+            año, mes, mes_base
+        )
+        
+        # 1. Obtener producción programada del mes
+        from sqlalchemy import extract
+        producciones_programadas = ProduccionProgramada.query.filter(
+            extract('year', ProduccionProgramada.fecha_programacion) == año,
+            extract('month', ProduccionProgramada.fecha_programacion) == mes
+        ).all()
+        
+        # Agrupar producción programada por producto_id (sumando si hay múltiples)
+        programado_por_producto = {}
+        for prod in producciones_programadas:
+            producto = prod.producto
+            kg = prod.cantidad_batches * producto.peso_batch_kg
+            if producto.id not in programado_por_producto:
+                programado_por_producto[producto.id] = {
+                    'producto_id': producto.id,
+                    'producto': producto.to_dict(),
+                    'cantidad_kg': 0,
+                    'cantidad_batches': 0,
+                    'origen': 'programado',
+                    'confianza': 1.0  # 100% confianza en datos programados
+                }
+            programado_por_producto[producto.id]['cantidad_kg'] += kg
+            programado_por_producto[producto.id]['cantidad_batches'] += prod.cantidad_batches
+        
+        # 2. Obtener predicciones ML para productos sin programación
+        productos_activos = Producto.query.filter_by(activo=True).all()
+        productos_ids_sin_programacion = [
+            p.id for p in productos_activos 
+            if p.id not in programado_por_producto
+        ]
+        
+        predicciones_ml = []
+        if predictor and predictor.get_training_status().get('is_trained'):
+            if productos_ids_sin_programacion:
+                predicciones_ml = predictor.predict_month(
+                    productos_ids_sin_programacion, año, mes
+                )
+        
+        # 3. Combinar: programados + predicciones ML
+        mix_produccion = list(programado_por_producto.values())
+        
+        for pred in predicciones_ml:
+            if pred.get('cantidad_kg') and pred['cantidad_kg'] > 0:
+                producto = db.session.get(Producto, pred['producto_id'])
+                if producto:
+                    mix_produccion.append({
+                        'producto_id': pred['producto_id'],
+                        'producto': producto.to_dict(),
+                        'cantidad_kg': pred['cantidad_kg'],
+                        'cantidad_batches': pred['cantidad_kg'] / producto.peso_batch_kg if producto.peso_batch_kg else 0,
+                        'origen': 'ml',
+                        'confianza': pred.get('confianza', 0.7),
+                        'metodo': pred.get('metodo', 'modelo')
+                    })
+        
+        # 4. Calcular costos si tenemos mes_base
+        if mes_base and mix_produccion:
+            # Obtener costos indirectos
+            costos = CostoIndirecto.query.filter_by(mes_base=mes_base).all()
+            
+            if costos:
+                total_sp = sum(c.monto for c in costos if c.tipo_distribucion == 'SP')
+                total_gif = sum(c.monto for c in costos if c.tipo_distribucion == 'GIF')
+                total_dep = sum(c.monto for c in costos if c.tipo_distribucion == 'DEP')
+                
+                # Calcular inflación acumulada
+                inflacion_acumulada = 1.0
+                if mes_produccion > mes_base:
+                    inflaciones = InflacionMensual.query.filter(
+                        InflacionMensual.mes > mes_base,
+                        InflacionMensual.mes <= mes_produccion
+                    ).all()
+                    for inf in inflaciones:
+                        inflacion_acumulada *= (1 + inf.porcentaje / 100)
+                
+                # Ajustar costos por inflación
+                total_sp_aj = total_sp * inflacion_acumulada
+                total_gif_aj = total_gif * inflacion_acumulada
+                total_dep_aj = total_dep * inflacion_acumulada
+                
+                # Calcular totales del mix
+                total_kg_mes = sum(p['cantidad_kg'] for p in mix_produccion)
+                total_minutos_mes = 0
+                for p in mix_produccion:
+                    producto = db.session.get(Producto, p['producto_id'])
+                    if producto:
+                        total_minutos_mes += p['cantidad_kg'] * (producto.min_mo_kg or 0)
+                
+                # Calcular costos por producto
+                for item in mix_produccion:
+                    producto = db.session.get(Producto, item['producto_id'])
+                    if not producto:
+                        continue
+                    
+                    kg = item['cantidad_kg']
+                    minutos = kg * (producto.min_mo_kg or 0)
+                    
+                    # Obtener costo MP base
+                    costeo = producto.get_costeo()
+                    mp_base_kg = costeo['resumen']['costo_por_kg'] if costeo else 0
+                    mp_por_kg = mp_base_kg * inflacion_acumulada
+                    
+                    # Distribuir costos indirectos
+                    if total_kg_mes > 0:
+                        pct_kg = kg / total_kg_mes
+                        pct_mo = (minutos / total_minutos_mes) if total_minutos_mes > 0 else pct_kg
+                        
+                        costo_sp = total_sp_aj * pct_mo
+                        costo_gif = total_gif_aj * pct_kg
+                        costo_dep = total_dep_aj * pct_kg
+                        
+                        ind_por_kg = (costo_sp + costo_gif + costo_dep) / kg if kg > 0 else 0
+                    else:
+                        ind_por_kg = 0
+                    
+                    total_por_kg = mp_por_kg + ind_por_kg
+                    
+                    item['mp_por_kg'] = round(mp_por_kg, 2)
+                    item['ind_por_kg'] = round(ind_por_kg, 2)
+                    item['total_por_kg'] = round(total_por_kg, 2)
+                    item['costo_total'] = round(total_por_kg * kg, 2)
+                    item['inflacion_acumulada_pct'] = round((inflacion_acumulada - 1) * 100, 2)
+        
+        # Estadísticas del resultado
+        count_programados = sum(1 for p in mix_produccion if p['origen'] == 'programado')
+        count_ml = sum(1 for p in mix_produccion if p['origen'] == 'ml')
+        total_kg = sum(p['cantidad_kg'] for p in mix_produccion)
+        
+        logger.info(
+            "proyeccion_hibrida.done año=%s mes=%s programados=%s ml=%s total_kg=%.2f",
+            año, mes, count_programados, count_ml, total_kg
+        )
+        
+        return jsonify({
+            'año': año,
+            'mes': mes,
+            'mes_base': mes_base,
+            'mix_produccion': mix_produccion,
+            'estadisticas': {
+                'productos_programados': count_programados,
+                'productos_ml': count_ml,
+                'total_productos': len(mix_produccion),
+                'total_kg': round(total_kg, 2)
+            }
+        })
+        
+    except Exception as e:
+        logger.exception("proyeccion_hibrida.error")
+        return jsonify({'error': str(e)}), 500
+
+
 # ===== COSTOS INDIRECTOS =====
 @app.route('/api/costos-indirectos', methods=['GET'])
 def get_costos_indirectos():

@@ -59,6 +59,7 @@ function Proyecciones() {
     const [error, setError] = useState(null)
     const [mensaje, setMensaje] = useState(null)
     const [archivoSeleccionado, setArchivoSeleccionado] = useState(null)
+    const [modoProyeccion, setModoProyeccion] = useState('hibrido') // 'hibrido' | 'solo_ml'
 
     const mlMeta = mlStatus?.metadata || null
     const mlTrainedAtLabel = useMemo(() => {
@@ -141,7 +142,7 @@ function Proyecciones() {
             setMensaje('⚠️ Seleccione un archivo Excel primero')
             return
         }
-        
+
         setImporting(true)
         setMensaje(null)
         try {
@@ -201,7 +202,8 @@ function Proyecciones() {
             return
         }
 
-        if (!mlStatus?.is_trained) {
+        // En modo híbrido no requerimos modelo entrenado si hay producción programada
+        if (modoProyeccion === 'solo_ml' && !mlStatus?.is_trained) {
             setMensaje('⚠️ El modelo ML no está entrenado. Importe datos históricos y entrene el modelo primero.')
             return
         }
@@ -209,23 +211,49 @@ function Proyecciones() {
         setPredicting(true)
         setMensaje(null)
         try {
-            const result = await mlApi.predict(periodo.año, periodo.mes)
-            setPredicciones(result.predicciones || [])
+            if (modoProyeccion === 'hibrido') {
+                // Modo híbrido: usa endpoint que combina programado + ML
+                const result = await mlApi.predictHibrido(periodo.año, periodo.mes, mesBase)
 
-            if (result.predicciones?.length === 0) {
-                setMensaje('⚠️ No hay predicciones disponibles. Verifique que hay datos históricos para los productos.')
-                setPrediccionesConCostos([])
-                return
+                if (!result.mix_produccion || result.mix_produccion.length === 0) {
+                    setMensaje('⚠️ No hay datos de producción. Programe producción o entrene el modelo ML.')
+                    setPrediccionesConCostos([])
+                    return
+                }
+
+                // El endpoint híbrido ya calcula los costos
+                setPrediccionesConCostos(result.mix_produccion)
+                setPredicciones(result.mix_produccion)
+
+                // Mostrar estadísticas
+                const stats = result.estadisticas
+                if (stats.productos_programados > 0 && stats.productos_ml > 0) {
+                    setMensaje(`✅ Mix: ${stats.productos_programados} programados + ${stats.productos_ml} ML = ${stats.total_productos} productos`)
+                } else if (stats.productos_programados > 0) {
+                    setMensaje(`✅ ${stats.productos_programados} productos con producción programada`)
+                } else if (stats.productos_ml > 0) {
+                    setMensaje(`✅ ${stats.productos_ml} productos con predicción ML`)
+                }
+            } else {
+                // Modo solo ML (comportamiento original)
+                const result = await mlApi.predict(periodo.año, periodo.mes)
+                setPredicciones(result.predicciones || [])
+
+                if (result.predicciones?.length === 0) {
+                    setMensaje('⚠️ No hay predicciones disponibles. Verifique que hay datos históricos para los productos.')
+                    setPrediccionesConCostos([])
+                    return
+                }
+
+                // Calcular costos para predicciones
+                const prediccionesConCostosCalc = await calcularCostos(result.predicciones)
+                setPrediccionesConCostos(prediccionesConCostosCalc)
             }
 
-            // Calcular costos para predicciones
-            const prediccionesConCostosCalc = await calcularCostos(result.predicciones)
-            setPrediccionesConCostos(prediccionesConCostosCalc)
-
             // Verificar si hay productos sin costo
-            const sinCosto = prediccionesConCostosCalc.filter(p => p.mp_por_kg === 0)
+            const sinCosto = prediccionesConCostos.filter(p => p.mp_por_kg === 0)
             if (sinCosto.length > 0) {
-                setMensaje(`⚠️ ${sinCosto.length} producto(s) tienen costo $0 (sin fórmula definida)`)
+                setMensaje(prev => `${prev || ''} ⚠️ ${sinCosto.length} producto(s) sin fórmula`)
             }
 
         } catch (err) {
@@ -587,6 +615,30 @@ function Proyecciones() {
                     <h3 className="card-title">Generar Predicciones</h3>
                 </div>
                 <div className="prediction-controls">
+                    <div className="mode-toggle" style={{ marginBottom: 'var(--spacing-3)' }}>
+                        <label style={{ marginRight: 'var(--spacing-2)', fontWeight: '500' }}>Modo:</label>
+                        <div className="btn-group">
+                            <button
+                                className={`btn btn-sm ${modoProyeccion === 'hibrido' ? 'btn-primary' : 'btn-outline'}`}
+                                onClick={() => setModoProyeccion('hibrido')}
+                                title="Usa producción programada + predicciones ML para productos sin programar"
+                            >
+                                📅 Híbrido
+                            </button>
+                            <button
+                                className={`btn btn-sm ${modoProyeccion === 'solo_ml' ? 'btn-primary' : 'btn-outline'}`}
+                                onClick={() => setModoProyeccion('solo_ml')}
+                                title="Solo predicciones del modelo ML"
+                            >
+                                🤖 Solo ML
+                            </button>
+                        </div>
+                        {modoProyeccion === 'hibrido' && (
+                            <span style={{ marginLeft: 'var(--spacing-2)', fontSize: 'var(--font-size-sm)', color: 'var(--color-neutral-600)' }}>
+                                <Info size={14} style={{ verticalAlign: 'middle' }} /> Prioriza producción programada
+                            </span>
+                        )}
+                    </div>
                     <div className="period-selector">
                         <label>Período a Predecir:</label>
                         <select
@@ -609,14 +661,14 @@ function Proyecciones() {
                     <button
                         className="btn btn-primary btn-lg"
                         onClick={handlePredict}
-                        disabled={predicting || !mlStatus?.is_trained}
+                        disabled={predicting || (modoProyeccion === 'solo_ml' && !mlStatus?.is_trained)}
                     >
                         {predicting ? <Clock size={20} className="spin" /> : <Bot size={20} />}
                         {predicting ? 'Calculando...' : 'Generar Predicciones'}
                     </button>
                 </div>
 
-                {!mlStatus?.is_trained && (
+                {modoProyeccion === 'solo_ml' && !mlStatus?.is_trained && (
                     <div className="prediction-notice">
                         <span className="notice-icon"><Lightbulb size={20} /></span>
                         Importe datos históricos y entrene el modelo para generar predicciones.
@@ -699,6 +751,7 @@ function Proyecciones() {
                                 <thead>
                                     <tr>
                                         <th>Producto</th>
+                                        <th className="text-center">Origen</th>
                                         <th className="text-right">Kg Proyectados</th>
                                         <th className="text-right">MP/Kg</th>
                                         <th className="text-right">Ind/Kg</th>
@@ -713,6 +766,17 @@ function Proyecciones() {
                                             <td>
                                                 <strong>{p.producto?.nombre || `ID: ${p.producto_id}`}</strong>
                                                 <div className="text-muted font-mono">{p.producto?.codigo}</div>
+                                            </td>
+                                            <td className="text-center">
+                                                {p.origen === 'programado' ? (
+                                                    <span className="origen-badge origen-programado" title="Producción programada">
+                                                        📅 Prog.
+                                                    </span>
+                                                ) : (
+                                                    <span className="origen-badge origen-ml" title="Predicción ML">
+                                                        🤖 ML
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="table-number prediction-value">
                                                 {formatNumber(p.cantidad_kg, 0)} kg
@@ -731,7 +795,7 @@ function Proyecciones() {
                                             </td>
                                             <td className="text-center">
                                                 <span className={`confidence-badge confidence-${getConfidenceLevel(p.confianza)}`}>
-                                                    {Math.round(p.confianza * 100)}%
+                                                    {Math.round((p.confianza || 0) * 100)}%
                                                 </span>
                                             </td>
                                         </tr>
