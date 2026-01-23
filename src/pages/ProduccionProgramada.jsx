@@ -179,21 +179,30 @@ function ProduccionProgramada() {
 
             // Cargar costos de cada producto
             const costosMap = {}
-            await Promise.all(
+            const resultados = await Promise.allSettled(
                 productosData.map(async (p) => {
-                    try {
-                        const costeo = await costeoApi.getByProducto(p.id)
-                        costosMap[p.id] = {
-                            costoNetoBatch: costeo.resumen?.total_neto || 0,
-                            costoPorKg: costeo.resumen?.costo_por_kg || 0,
-                            totalesPorCategoria: costeo.totales_categoria || {},
-                            ingredientes: costeo.ingredientes || []
-                        }
-                    } catch {
-                        costosMap[p.id] = { costoNetoBatch: 0, costoPorKg: 0, totalesPorCategoria: {}, ingredientes: [] }
-                    }
+                    const costeo = await costeoApi.getByProducto(p.id)
+                    return { id: p.id, costeo }
                 })
             )
+            
+            resultados.forEach((resultado, index) => {
+                const productoId = productosData[index].id
+                if (resultado.status === 'fulfilled' && resultado.value.costeo) {
+                    const costeo = resultado.value.costeo
+                    costosMap[productoId] = {
+                        costoNetoBatch: costeo.resumen?.total_neto || 0,
+                        costoPorKg: costeo.resumen?.costo_por_kg || 0,
+                        totalesPorCategoria: costeo.totales_categoria || {},
+                        ingredientes: costeo.ingredientes || []
+                    }
+                } else {
+                    console.warn(`Error cargando costeo para producto ${productoId}:`, resultado.reason || 'Sin datos')
+                    costosMap[productoId] = { costoNetoBatch: 0, costoPorKg: 0, totalesPorCategoria: {}, ingredientes: [] }
+                }
+            })
+            
+            console.log('Costos cargados:', Object.entries(costosMap).filter(([_, v]) => v.costoPorKg > 0).length, 'de', productosData.length, 'productos con costo > 0')
             setProductosConCosto(costosMap)
 
             await loadProduccionMes()
