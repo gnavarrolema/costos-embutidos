@@ -3251,48 +3251,54 @@ def proyeccion_multiperiodo():
                 
                 # Calcular costos por producto
                 for prod_id, detalles in prod_detalles.items():
-                    producto = productos_dict[prod_id]
-                    costeo = producto.get_costeo()
-                    
-                    kg = detalles['kg']
-                    minutos_prod = detalles['minutos']
-                    
-                    # MP con inflación
-                    mp_base_kg = costeo['resumen']['costo_por_kg']
-                    mp_por_kg = mp_base_kg * inflacion_acumulada
-                    
-                    # Costos indirectos distribuidos
-                    # GIF/DEP: por kg siempre que exista producción.
-                    # SP: por minutos si existen; si no, fallback a kg.
-                    if kg > 0 and total_kg_mes > 0:
-                        pct_kg = kg / total_kg_mes
-                        pct_sp = (minutos_prod / total_minutos_mes) if total_minutos_mes > 0 else pct_kg
+                    try:
+                        producto = productos_dict[prod_id]
+                        costeo = producto.get_costeo()
                         
-                        costo_sp = total_sp * pct_sp
-                        costo_gif = total_gif * pct_kg
-                        costo_dep = total_dep * pct_kg
+                        kg = detalles['kg']
+                        minutos_prod = detalles['minutos']
                         
-                        ind_por_kg = (costo_sp + costo_gif + costo_dep) / kg
-                    else:
-                        ind_por_kg = 0
-                    
-                    total_por_kg = mp_por_kg + ind_por_kg
-                    costo_total = total_por_kg * kg
-                    
-                    productos_mes.append({
-                        'producto_id': prod_id,
-                        'nombre': producto.nombre,
-                        'codigo': producto.codigo,
-                        'kg': round(kg, 2),
-                        'mp_por_kg': round(mp_por_kg, 2),
-                        'ind_por_kg': round(ind_por_kg, 2),
-                        'total_por_kg': round(total_por_kg, 2),
-                        'costo_total': round(costo_total, 2),
-                        'sin_formula': costeo.get('advertencias') is not None
-                    })
-                    
-                    total_kg_periodo += kg
-                    costo_total_periodo += costo_total
+                        # MP con inflación
+                        mp_base_kg = costeo['resumen']['costo_por_kg'] or 0
+                        mp_por_kg = mp_base_kg * inflacion_acumulada
+                        
+                        # Costos indirectos distribuidos
+                        # GIF/DEP: por kg siempre que exista producción.
+                        # SP: por minutos si existen; si no, fallback a kg.
+                        if kg > 0 and total_kg_mes > 0:
+                            pct_kg = kg / total_kg_mes
+                            pct_sp = (minutos_prod / total_minutos_mes) if total_minutos_mes > 0 else pct_kg
+                            
+                            costo_sp = total_sp * pct_sp
+                            costo_gif = total_gif * pct_kg
+                            costo_dep = total_dep * pct_kg
+                            
+                            ind_por_kg = (costo_sp + costo_gif + costo_dep) / kg
+                        else:
+                            ind_por_kg = 0
+                        
+                        total_por_kg = mp_por_kg + ind_por_kg
+                        costo_total = total_por_kg * kg
+                        
+                        productos_mes.append({
+                            'producto_id': prod_id,
+                            'nombre': producto.nombre,
+                            'codigo': producto.codigo,
+                            'kg': round(kg, 2),
+                            'mp_por_kg': round(mp_por_kg, 2),
+                            'ind_por_kg': round(ind_por_kg, 2),
+                            'total_por_kg': round(total_por_kg, 2),
+                            'costo_total': round(costo_total, 2),
+                            'sin_formula': costeo.get('advertencias') is not None
+                        })
+                        
+                        total_kg_periodo += kg
+                        costo_total_periodo += costo_total
+                    except Exception as prod_err:
+                        logger.warning(
+                            "proyeccion_multiperiodo.producto_error mes=%s producto_id=%s error=%s",
+                            mes_proj, prod_id, str(prod_err)
+                        )
             
             else:
                 # Usar predicciones ML
@@ -3314,59 +3320,65 @@ def proyeccion_multiperiodo():
                                 if prod_id in productos_dict:
                                     producto = productos_dict[prod_id]
                                     kg = pred['cantidad_kg']
-                                    minutos = kg * producto.min_mo_kg
+                                    minutos = kg * (producto.min_mo_kg or 0)
                                     total_minutos_mes += minutos
                         
                         # Segunda pasada: calcular costos
                         for pred in predicciones:
-                            if pred['cantidad_kg'] and pred['cantidad_kg'] > 0:
-                                prod_id = pred['producto_id']
-                                if prod_id not in productos_dict:
-                                    continue
-                                
-                                producto = productos_dict[prod_id]
-                                costeo = producto.get_costeo()
-                                kg = pred['cantidad_kg']
-                                minutos_prod = kg * producto.min_mo_kg
-                                
-                                # MP con inflación
-                                mp_base_kg = costeo['resumen']['costo_por_kg']
-                                mp_por_kg = mp_base_kg * inflacion_acumulada
-                                
-                                # Costos indirectos distribuidos
-                                # GIF/DEP: por kg siempre que exista producción.
-                                # SP: por minutos si existen; si no, fallback a kg.
-                                if kg > 0 and total_kg_mes > 0:
-                                    pct_kg = kg / total_kg_mes
-                                    pct_sp = (minutos_prod / total_minutos_mes) if total_minutos_mes > 0 else pct_kg
+                            try:
+                                if pred['cantidad_kg'] and pred['cantidad_kg'] > 0:
+                                    prod_id = pred['producto_id']
+                                    if prod_id not in productos_dict:
+                                        continue
                                     
-                                    costo_sp = total_sp * pct_sp
-                                    costo_gif = total_gif * pct_kg
-                                    costo_dep = total_dep * pct_kg
+                                    producto = productos_dict[prod_id]
+                                    costeo = producto.get_costeo()
+                                    kg = pred['cantidad_kg']
+                                    minutos_prod = kg * (producto.min_mo_kg or 0)
                                     
-                                    ind_por_kg = (costo_sp + costo_gif + costo_dep) / kg
-                                else:
-                                    ind_por_kg = 0
-                                
-                                total_por_kg = mp_por_kg + ind_por_kg
-                                costo_total = total_por_kg * kg
-                                
-                                productos_mes.append({
-                                    'producto_id': prod_id,
-                                    'nombre': producto.nombre,
-                                    'codigo': producto.codigo,
-                                    'kg': round(kg, 2),
-                                    'mp_por_kg': round(mp_por_kg, 2),
-                                    'ind_por_kg': round(ind_por_kg, 2),
-                                    'total_por_kg': round(total_por_kg, 2),
-                                    'costo_total': round(costo_total, 2),
-                                    'confianza': pred.get('confianza', 0),
-                                    'metodo': pred.get('metodo', 'desconocido'),
-                                    'sin_formula': costeo.get('advertencias') is not None
-                                })
-                                
-                                total_kg_periodo += kg
-                                costo_total_periodo += costo_total
+                                    # MP con inflación
+                                    mp_base_kg = costeo['resumen']['costo_por_kg'] or 0
+                                    mp_por_kg = mp_base_kg * inflacion_acumulada
+                                    
+                                    # Costos indirectos distribuidos
+                                    # GIF/DEP: por kg siempre que exista producción.
+                                    # SP: por minutos si existen; si no, fallback a kg.
+                                    if kg > 0 and total_kg_mes > 0:
+                                        pct_kg = kg / total_kg_mes
+                                        pct_sp = (minutos_prod / total_minutos_mes) if total_minutos_mes > 0 else pct_kg
+                                        
+                                        costo_sp = total_sp * pct_sp
+                                        costo_gif = total_gif * pct_kg
+                                        costo_dep = total_dep * pct_kg
+                                        
+                                        ind_por_kg = (costo_sp + costo_gif + costo_dep) / kg
+                                    else:
+                                        ind_por_kg = 0
+                                    
+                                    total_por_kg = mp_por_kg + ind_por_kg
+                                    costo_total = total_por_kg * kg
+                                    
+                                    productos_mes.append({
+                                        'producto_id': prod_id,
+                                        'nombre': producto.nombre,
+                                        'codigo': producto.codigo,
+                                        'kg': round(kg, 2),
+                                        'mp_por_kg': round(mp_por_kg, 2),
+                                        'ind_por_kg': round(ind_por_kg, 2),
+                                        'total_por_kg': round(total_por_kg, 2),
+                                        'costo_total': round(costo_total, 2),
+                                        'confianza': pred.get('confianza', 0),
+                                        'metodo': pred.get('metodo', 'desconocido'),
+                                        'sin_formula': costeo.get('advertencias') is not None
+                                    })
+                                    
+                                    total_kg_periodo += kg
+                                    costo_total_periodo += costo_total
+                            except Exception as pred_err:
+                                logger.warning(
+                                    "proyeccion_multiperiodo.ml_producto_error mes=%s producto_id=%s error=%s",
+                                    mes_proj, pred.get('producto_id'), str(pred_err)
+                                )
                 else:
                     fuente = 'sin_datos'
             
