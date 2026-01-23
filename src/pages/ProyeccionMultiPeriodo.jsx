@@ -66,8 +66,7 @@ function ProyeccionMultiPeriodo() {
 
     async function loadMesesBase() {
         try {
-            const response = await fetch('/api/costos-indirectos')
-            const data = await response.json()
+            const data = await costosIndirectosApi.getAll()
 
             // Extraer meses únicos
             const mesesSet = new Set(data.map(c => c.mes_base))
