@@ -83,7 +83,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     environment:
       name: production
-      url: ${{ vars.PRODUCTION_URL }}
+      url: https://costos-frontend-332269458514.us-central1.run.app
 
     steps:
       - name: Checkout code
