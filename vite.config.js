@@ -9,12 +9,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false
       }
     }
   },
-  // Variables de entorno que se exponen al cliente
-  define: {
-    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || '')
-  }
 })

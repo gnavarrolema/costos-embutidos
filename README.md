@@ -223,4 +223,3 @@ Para dudas o problemas, consultar la [Guía de Usuario](USER_GUIDE.md) o crear u
 ---
 
 **© 2024 Sistema de Costeo de Embutidos** | Desarrollado con ❤️
-# Test deploy Mon Dec 22 09:36:35 -03 2025

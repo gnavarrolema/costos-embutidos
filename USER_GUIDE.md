@@ -182,7 +182,7 @@ python backend/app.py
 
 **Salida esperada:**
 ```
- * Running on http://127.0.0.1:5000
+ * Running on http://0.0.0.0:5000
  * Debug mode: on
 ```
 
@@ -1580,7 +1580,7 @@ Si el frontend no puede conectarse al backend:
 
 **1. Verificar que el backend está corriendo:**
 ```bash
-# Debería ver: "Running on http://127.0.0.1:5000"
+# Debería ver: "Running on http://0.0.0.0:5000"
 ```
 
 **2. Verificar CORS en el navegador:**
@@ -1589,7 +1589,22 @@ Si el frontend no puede conectarse al backend:
 
 **3. Verificar la URL del API:**
 - El frontend está configurado para `http://localhost:5000`
-- Si cambió el puerto del backend, actualizar `src/api.js`
+- Si cambió el puerto del backend, actualizar `src/services/api.js`
+
+**4. Desarrollo WSL + Windows:**
+
+Si ejecuta el **frontend en WSL** y el **backend en Windows**, puede haber problemas de conectividad. Solución:
+
+1. Crear archivo `.env.local` en la raíz del proyecto:
+   ```
+   VITE_API_URL=http://localhost:5000
+   ```
+
+2. Esto hace que el frontend llame directamente al backend sin usar el proxy de Vite.
+
+3. Reiniciar el frontend (`npm run dev`) después de crear el archivo.
+
+> 💡 **Nota**: `.env.local` está en `.gitignore` y no se sube al repositorio.
 
 ### Los logs del sistema
 
