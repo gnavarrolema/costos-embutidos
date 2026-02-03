@@ -13,12 +13,14 @@ import {
     ClipboardList,
     Tag,
     Factory,
-    Scale
+    Scale,
+    FileText
 } from 'lucide-react'
 import {
     materiasPrimasApi,
     productosApi,
     produccionApi,
+    exportarApi,
     formatCurrency
 } from '../services/api'
 import './Dashboard.css'
@@ -133,9 +135,18 @@ function Dashboard() {
                     <h1 className="page-title">Dashboard</h1>
                     <p className="page-subtitle">Resumen de producción y costos</p>
                 </div>
-                <button className="btn btn-secondary" onClick={loadBaseData}>
-                    <RefreshCw size={16} className="mr-2" /> Actualizar
-                </button>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                        className="btn btn-outline d-flex align-items-center gap-2"
+                        onClick={() => exportarApi.pdfResumenMensual(mesSeleccionado)}
+                        title="Descargar resumen mensual en PDF"
+                    >
+                        <FileText size={18} /> PDF
+                    </button>
+                    <button className="btn btn-secondary" onClick={loadBaseData}>
+                        <RefreshCw size={16} className="mr-2" /> Actualizar
+                    </button>
+                </div>
             </header>
 
             {/* Selector de Mes */}

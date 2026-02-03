@@ -8,7 +8,7 @@ import {
     formatNumber,
     getCategoryClass
 } from '../services/api'
-import { Calculator, TrendingUp, Coins, Zap } from 'lucide-react'
+import { Calculator, TrendingUp, Coins, Zap, FileText } from 'lucide-react'
 import './HojaCostos.css'
 
 const MESES = [
@@ -143,12 +143,21 @@ function HojaCostos() {
                     <p className="page-subtitle">Costeo completo por producto (Variable + Indirecto)</p>
                 </div>
                 {costeo && (
-                    <button
-                        className="btn btn-success"
-                        onClick={() => exportarApi.costeoProducto(selectedProductoId, mesBase, mesProduccion)}
-                    >
-                        📥 Exportar Excel
-                    </button>
+                    <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                            className="btn btn-success"
+                            onClick={() => exportarApi.costeoProducto(selectedProductoId, mesBase, mesProduccion)}
+                        >
+                            📥 Excel
+                        </button>
+                        <button
+                            className="btn btn-outline d-flex align-items-center gap-2"
+                            onClick={() => exportarApi.pdfCosteoProducto(selectedProductoId, mesBase, mesProduccion)}
+                            title="Descargar hoja de costos en PDF"
+                        >
+                            <FileText size={18} /> PDF
+                        </button>
+                    </div>
                 )}
             </header>
 

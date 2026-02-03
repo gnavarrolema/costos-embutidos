@@ -18,6 +18,7 @@ import {
     ChevronUp,
     Settings,
     Download,
+    FileText,
     Bot,
     Plus,
     Package,
@@ -185,7 +186,7 @@ function ProduccionProgramada() {
                     return { id: p.id, costeo }
                 })
             )
-            
+
             resultados.forEach((resultado, index) => {
                 const productoId = productosData[index].id
                 if (resultado.status === 'fulfilled' && resultado.value.costeo) {
@@ -201,7 +202,7 @@ function ProduccionProgramada() {
                     costosMap[productoId] = { costoNetoBatch: 0, costoPorKg: 0, totalesPorCategoria: {}, ingredientes: [] }
                 }
             })
-            
+
             console.log('Costos cargados:', Object.entries(costosMap).filter(([_, v]) => v.costoPorKg > 0).length, 'de', productosData.length, 'productos con costo > 0')
             setProductosConCosto(costosMap)
 
@@ -542,7 +543,14 @@ function ProduccionProgramada() {
                         onClick={() => exportarApi.produccion(mesSeleccionado)}
                         title="Exportar producción a Excel"
                     >
-                        <Download size={18} /> Exportar
+                        <Download size={18} /> Excel
+                    </button>
+                    <button
+                        className="btn btn-outline d-flex align-items-center gap-2"
+                        onClick={() => exportarApi.pdfProduccion(mesSeleccionado)}
+                        title="Descargar producción en PDF"
+                    >
+                        <FileText size={18} /> PDF
                     </button>
                     <button
                         className="btn btn-info d-flex align-items-center gap-2"

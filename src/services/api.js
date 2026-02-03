@@ -263,6 +263,27 @@ export const exportarApi = {
     requerimientos: (mes) => {
         window.open(`${API_BASE}/exportar/requerimientos?mes=${mes}`, '_blank')
     },
+    // PDF exports
+    pdfProduccion: (mes) => {
+        window.open(`${API_BASE}/exportar/pdf/produccion?mes=${mes}`, '_blank')
+    },
+    pdfRequerimientos: (mes) => {
+        window.open(`${API_BASE}/exportar/pdf/requerimientos?mes=${mes}`, '_blank')
+    },
+    pdfCosteoProducto: (productoId, mesBase = null, mesProduccion = null) => {
+        let url = `${API_BASE}/exportar/pdf/costeo/${productoId}`
+        const params = []
+        if (mesBase) params.push(`mes_base=${mesBase}`)
+        if (mesProduccion) params.push(`mes_produccion=${mesProduccion}`)
+        if (params.length > 0) url += `?${params.join('&')}`
+        window.open(url, '_blank')
+    },
+    pdfCostosIndirectos: (mes) => {
+        window.open(`${API_BASE}/exportar/pdf/costos-indirectos?mes=${mes}`, '_blank')
+    },
+    pdfResumenMensual: (mes) => {
+        window.open(`${API_BASE}/exportar/pdf/resumen?mes=${mes}`, '_blank')
+    },
 }
 
 // ===== UTILIDADES =====

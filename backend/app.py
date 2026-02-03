@@ -3096,7 +3096,840 @@ def exportar_requerimientos():
         return jsonify({'error': str(e)}), 500
 
 
-# ===== PROYECCIÓN MULTI-PERÍODO =====
+# ===== EXPORTACIÓN A PDF =====
+
+def _get_pdf_styles():
+    """Retorna estilos comunes para PDFs de reportes."""
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+    
+    styles = getSampleStyleSheet()
+    
+    # Título principal del reporte
+    styles.add(ParagraphStyle(
+        name='ReportTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        spaceAfter=20,
+        textColor=colors.HexColor('#0d9488'),
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    ))
+    
+    # Subtítulo con fecha/período
+    styles.add(ParagraphStyle(
+        name='ReportSubtitle',
+        fontSize=14,
+        spaceAfter=30,
+        textColor=colors.HexColor('#64748b'),
+        alignment=TA_CENTER,
+        fontName='Helvetica'
+    ))
+    
+    # Encabezado de sección
+    styles.add(ParagraphStyle(
+        name='SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceBefore=20,
+        spaceAfter=10,
+        textColor=colors.HexColor('#134e4a'),
+        fontName='Helvetica-Bold'
+    ))
+    
+    # Texto normal
+    styles.add(ParagraphStyle(
+        name='NormalText',
+        parent=styles['Normal'],
+        fontSize=10,
+        spaceBefore=4,
+        spaceAfter=4,
+        textColor=colors.HexColor('#334155')
+    ))
+    
+    # Texto destacado
+    styles.add(ParagraphStyle(
+        name='HighlightText',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=colors.HexColor('#0f766e'),
+        fontName='Helvetica-Bold'
+    ))
+    
+    # Pie de página
+    styles.add(ParagraphStyle(
+        name='Footer',
+        fontSize=8,
+        textColor=colors.HexColor('#94a3b8'),
+        alignment=TA_CENTER
+    ))
+    
+    return styles
+
+
+def _add_pdf_header_footer(canvas, doc, title):
+    """Agrega encabezado y pie de página a cada página del PDF."""
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    
+    canvas.saveState()
+    
+    # Encabezado
+    canvas.setFillColor(colors.HexColor('#0d9488'))
+    canvas.setFont('Helvetica-Bold', 10)
+    canvas.drawString(2*cm, A4[1] - 1.2*cm, title)
+    
+    canvas.setFillColor(colors.HexColor('#64748b'))
+    canvas.setFont('Helvetica', 8)
+    canvas.drawRightString(A4[0] - 2*cm, A4[1] - 1.2*cm, f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    
+    # Línea debajo del encabezado
+    canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+    canvas.setLineWidth(0.5)
+    canvas.line(2*cm, A4[1] - 1.5*cm, A4[0] - 2*cm, A4[1] - 1.5*cm)
+    
+    # Pie de página
+    canvas.setFillColor(colors.HexColor('#94a3b8'))
+    canvas.setFont('Helvetica', 8)
+    canvas.drawCentredString(A4[0]/2, 1*cm, f"Página {doc.page}")
+    
+    # Línea encima del pie
+    canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+    canvas.line(2*cm, 1.5*cm, A4[0] - 2*cm, 1.5*cm)
+    
+    canvas.restoreState()
+
+
+def _format_currency(value):
+    """Formatea un valor como moneda argentina."""
+    if value is None:
+        return '-'
+    return f"${value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+MESES_NOMBRE = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+
+@app.route('/api/exportar/pdf/produccion', methods=['GET'])
+def exportar_pdf_produccion():
+    """
+    Exporta la producción programada a PDF.
+    
+    Query params:
+    - mes: Mes a exportar (YYYY-MM)
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        
+        mes = request.args.get('mes', f"{date.today().year}-{date.today().month:02d}")
+        año, mes_num = map(int, mes.split('-'))
+        
+        # Obtener producción del mes
+        producciones = ProduccionProgramada.query.filter(
+            extract('year', ProduccionProgramada.fecha_programacion) == año,
+            extract('month', ProduccionProgramada.fecha_programacion) == mes_num
+        ).all()
+        
+        # Crear PDF en memoria
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2.5*cm,
+            bottomMargin=2*cm
+        )
+        
+        styles = _get_pdf_styles()
+        elements = []
+        
+        # Título
+        elements.append(Paragraph("PRODUCCIÓN PROGRAMADA", styles['ReportTitle']))
+        elements.append(Paragraph(f"{MESES_NOMBRE[mes_num]} {año}", styles['ReportSubtitle']))
+        
+        if not producciones:
+            elements.append(Paragraph("No hay producción programada para este período.", styles['NormalText']))
+        else:
+            # Tabla de producción
+            data = [['Fecha', 'Código', 'Producto', 'Batches', 'Kg Total', 'Costo Total']]
+            
+            total_batches = 0
+            total_kg = 0
+            total_costo = 0
+            
+            for prod in producciones:
+                producto = prod.producto
+                costeo = producto.get_costeo()
+                costo_batch = costeo['resumen']['total_neto']
+                kg_total = prod.cantidad_batches * producto.peso_batch_kg
+                costo_total = prod.cantidad_batches * costo_batch
+                
+                data.append([
+                    prod.fecha_programacion.strftime('%d/%m/%Y') if prod.fecha_programacion else '',
+                    producto.codigo,
+                    producto.nombre[:30] + '...' if len(producto.nombre) > 30 else producto.nombre,
+                    str(prod.cantidad_batches),
+                    f"{kg_total:,.2f}",
+                    _format_currency(costo_total)
+                ])
+                
+                total_batches += prod.cantidad_batches
+                total_kg += kg_total
+                total_costo += costo_total
+            
+            # Fila de totales
+            data.append(['', '', 'TOTALES', str(total_batches), f"{total_kg:,.2f}", _format_currency(total_costo)])
+            
+            # Crear tabla
+            col_widths = [2.2*cm, 2*cm, 5*cm, 2*cm, 2.5*cm, 3*cm]
+            table = Table(data, colWidths=col_widths)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ccfbf1')),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            
+            elements.append(table)
+            
+            # Resumen
+            elements.append(Spacer(1, 1*cm))
+            elements.append(Paragraph("Resumen", styles['SectionHeader']))
+            elements.append(Paragraph(f"Total de registros: {len(producciones)}", styles['NormalText']))
+            elements.append(Paragraph(f"Total de batches: {total_batches}", styles['NormalText']))
+            elements.append(Paragraph(f"Total de kilogramos: {total_kg:,.2f} Kg", styles['NormalText']))
+            elements.append(Paragraph(f"Costo total estimado: {_format_currency(total_costo)}", styles['HighlightText']))
+        
+        # Construir PDF
+        title = f"Producción - {MESES_NOMBRE[mes_num]} {año}"
+        doc.build(elements, onFirstPage=lambda c, d: _add_pdf_header_footer(c, d, title),
+                  onLaterPages=lambda c, d: _add_pdf_header_footer(c, d, title))
+        
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'produccion_{mes}.pdf'
+        )
+        
+    except Exception as e:
+        logger.exception("exportar_pdf_produccion.error")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/exportar/pdf/requerimientos', methods=['GET'])
+def exportar_pdf_requerimientos():
+    """
+    Exporta los requerimientos de materia prima a PDF.
+    
+    Query params:
+    - mes: Mes a exportar (YYYY-MM)
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        
+        mes = request.args.get('mes', f"{date.today().year}-{date.today().month:02d}")
+        año, mes_num = map(int, mes.split('-'))
+        
+        # Obtener producción del mes
+        producciones = ProduccionProgramada.query.filter(
+            extract('year', ProduccionProgramada.fecha_programacion) == año,
+            extract('month', ProduccionProgramada.fecha_programacion) == mes_num
+        ).all()
+        
+        # Calcular requerimientos
+        requerimientos = {}
+        for prog in producciones:
+            producto = prog.producto
+            costeo = producto.get_costeo()
+            
+            for ing in costeo['ingredientes']:
+                mp_id = ing['materia_prima_id']
+                cantidad_total = ing['cantidad'] * prog.cantidad_batches
+                costo_total = ing['costo_total'] * prog.cantidad_batches
+                
+                if mp_id not in requerimientos:
+                    requerimientos[mp_id] = {
+                        'nombre': ing['nombre'],
+                        'categoria': ing['categoria'],
+                        'unidad': ing['unidad'],
+                        'cantidad': 0,
+                        'costo': 0
+                    }
+                requerimientos[mp_id]['cantidad'] += cantidad_total
+                requerimientos[mp_id]['costo'] += costo_total
+        
+        # Crear PDF en memoria
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2.5*cm,
+            bottomMargin=2*cm
+        )
+        
+        styles = _get_pdf_styles()
+        elements = []
+        
+        # Título
+        elements.append(Paragraph("REQUERIMIENTOS DE MATERIA PRIMA", styles['ReportTitle']))
+        elements.append(Paragraph(f"{MESES_NOMBRE[mes_num]} {año}", styles['ReportSubtitle']))
+        
+        if not requerimientos:
+            elements.append(Paragraph("No hay requerimientos para este período.", styles['NormalText']))
+        else:
+            # Agrupar por categoría
+            categorias = {}
+            for mp_id, data in requerimientos.items():
+                cat = data['categoria']
+                if cat not in categorias:
+                    categorias[cat] = []
+                categorias[cat].append(data)
+            
+            total_general = 0
+            
+            for cat in ['CERDO', 'POLLO', 'GALLINA', 'INSUMOS', 'ENVASES']:
+                if cat not in categorias:
+                    continue
+                
+                items = categorias[cat]
+                cat_total = sum(item['costo'] for item in items)
+                total_general += cat_total
+                
+                # Encabezado de categoría
+                elements.append(Paragraph(f"{cat}", styles['SectionHeader']))
+                
+                # Tabla de la categoría
+                data_table = [['Materia Prima', 'Cantidad', 'Unidad', 'Costo Total']]
+                
+                for item in sorted(items, key=lambda x: x['nombre']):
+                    data_table.append([
+                        item['nombre'][:35] + '...' if len(item['nombre']) > 35 else item['nombre'],
+                        f"{item['cantidad']:,.3f}",
+                        item['unidad'],
+                        _format_currency(item['costo'])
+                    ])
+                
+                # Subtotal de categoría
+                data_table.append(['Subtotal ' + cat, '', '', _format_currency(cat_total)])
+                
+                col_widths = [7*cm, 3*cm, 2*cm, 3.5*cm]
+                table = Table(data_table, colWidths=col_widths)
+                
+                # Colores por categoría
+                cat_colors = {
+                    'CERDO': '#fecaca',
+                    'POLLO': '#fed7aa',
+                    'GALLINA': '#fef08a',
+                    'INSUMOS': '#bfdbfe',
+                    'ENVASES': '#bbf7d0'
+                }
+                
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 9),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor(cat_colors.get(cat, '#e5e7eb'))),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ]))
+                
+                elements.append(table)
+                elements.append(Spacer(1, 0.5*cm))
+            
+            # Total general
+            elements.append(Spacer(1, 0.5*cm))
+            elements.append(Paragraph(f"TOTAL GENERAL: {_format_currency(total_general)}", styles['HighlightText']))
+        
+        # Construir PDF
+        title = f"Requerimientos - {MESES_NOMBRE[mes_num]} {año}"
+        doc.build(elements, onFirstPage=lambda c, d: _add_pdf_header_footer(c, d, title),
+                  onLaterPages=lambda c, d: _add_pdf_header_footer(c, d, title))
+        
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'requerimientos_{mes}.pdf'
+        )
+        
+    except Exception as e:
+        logger.exception("exportar_pdf_requerimientos.error")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/exportar/pdf/costeo/<int:producto_id>', methods=['GET'])
+def exportar_pdf_costeo(producto_id):
+    """
+    Exporta la hoja de costos de un producto a PDF.
+    
+    Query params:
+    - mes_base: Mes base para costos indirectos (YYYY-MM)
+    - mes_produccion: Mes de producción (YYYY-MM)
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        
+        producto = _get_or_404(Producto, producto_id)
+        mes_base = request.args.get('mes_base')
+        mes_produccion = request.args.get('mes_produccion', f"{date.today().year}-{date.today().month:02d}")
+        
+        # Obtener costeo
+        costeo = producto.get_costeo()
+        
+        # Crear PDF en memoria
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2.5*cm,
+            bottomMargin=2*cm
+        )
+        
+        styles = _get_pdf_styles()
+        elements = []
+        
+        # Título
+        elements.append(Paragraph("HOJA DE COSTOS", styles['ReportTitle']))
+        elements.append(Paragraph(f"{producto.codigo} - {producto.nombre}", styles['ReportSubtitle']))
+        
+        # Información del producto
+        elements.append(Paragraph("Información del Producto", styles['SectionHeader']))
+        
+        info_data = [
+            ['Peso del Batch:', f"{producto.peso_batch_kg} Kg", '% Merma:', f"{producto.porcentaje_merma}%"],
+            ['Min M.O./Kg:', f"{producto.min_mo_kg or 0}", '', '']
+        ]
+        
+        info_table = Table(info_data, colWidths=[3.5*cm, 4*cm, 3.5*cm, 4*cm])
+        info_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#334155')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 0.5*cm))
+        
+        # Detalle de ingredientes
+        elements.append(Paragraph("Detalle de Materia Prima", styles['SectionHeader']))
+        
+        ing_data = [['Ingrediente', 'Categoría', 'Cantidad', 'Costo Unit.', 'Costo Total']]
+        
+        for ing in costeo['ingredientes']:
+            ing_data.append([
+                ing['nombre'][:25] + '...' if len(ing['nombre']) > 25 else ing['nombre'],
+                ing['categoria'],
+                f"{ing['cantidad']:.3f}",
+                _format_currency(ing['costo_unitario']),
+                _format_currency(ing['costo_total'])
+            ])
+        
+        col_widths = [5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 3*cm]
+        ing_table = Table(ing_data, colWidths=col_widths)
+        ing_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(ing_table)
+        elements.append(Spacer(1, 0.8*cm))
+        
+        # Resumen de costos
+        elements.append(Paragraph("Resumen de Costos Variables", styles['SectionHeader']))
+        
+        resumen = costeo['resumen']
+        resumen_data = [
+            ['Total Materia Prima:', _format_currency(resumen['total_materia_prima'])],
+            [f"Costo Merma ({producto.porcentaje_merma}%):", _format_currency(resumen['costo_merma'])],
+            ['Materia Prima Neta:', _format_currency(resumen['materia_prima_neta'])],
+            ['Envases:', _format_currency(resumen['total_envases'])],
+            ['', ''],
+            ['TOTAL COSTO VARIABLE (Batch):', _format_currency(resumen['total_neto'])],
+            ['Costo Variable por Kg:', _format_currency(resumen['costo_por_kg'])],
+        ]
+        
+        resumen_table = Table(resumen_data, colWidths=[8*cm, 4*cm])
+        resumen_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#334155')),
+            ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (0, -2), (-1, -1), colors.HexColor('#0f766e')),
+            ('BACKGROUND', (0, -2), (-1, -1), colors.HexColor('#ccfbf1')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(resumen_table)
+        
+        # Construir PDF
+        title = f"Hoja de Costos - {producto.codigo}"
+        doc.build(elements, onFirstPage=lambda c, d: _add_pdf_header_footer(c, d, title),
+                  onLaterPages=lambda c, d: _add_pdf_header_footer(c, d, title))
+        
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'hoja_costos_{producto.codigo}_{date.today().strftime("%Y%m%d")}.pdf'
+        )
+        
+    except Exception as e:
+        logger.exception("exportar_pdf_costeo.error")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/exportar/pdf/costos-indirectos', methods=['GET'])
+def exportar_pdf_costos_indirectos():
+    """
+    Exporta el resumen de costos indirectos a PDF.
+    
+    Query params:
+    - mes: Mes base (YYYY-MM)
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        
+        mes = request.args.get('mes', f"{date.today().year}-{date.today().month:02d}")
+        año, mes_num = map(int, mes.split('-'))
+        
+        # Obtener costos indirectos del mes
+        costos = CostoIndirecto.query.filter_by(mes_base=mes).all()
+        
+        # Crear PDF en memoria
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2.5*cm,
+            bottomMargin=2*cm
+        )
+        
+        styles = _get_pdf_styles()
+        elements = []
+        
+        # Título
+        elements.append(Paragraph("COSTOS INDIRECTOS", styles['ReportTitle']))
+        elements.append(Paragraph(f"{MESES_NOMBRE[mes_num]} {año}", styles['ReportSubtitle']))
+        
+        if not costos:
+            elements.append(Paragraph("No hay costos indirectos registrados para este período.", styles['NormalText']))
+        else:
+            # Agrupar por tipo de distribución
+            tipos = {'SP': 'Sueldos y Jornales (SP)', 'GIF': 'Gastos Indirectos (GIF)', 'DEP': 'Depreciación (DEP)'}
+            costos_por_tipo = {}
+            
+            for costo in costos:
+                tipo = costo.tipo_distribucion
+                if tipo not in costos_por_tipo:
+                    costos_por_tipo[tipo] = []
+                costos_por_tipo[tipo].append(costo)
+            
+            total_general = 0
+            
+            for tipo_key in ['SP', 'GIF', 'DEP']:
+                if tipo_key not in costos_por_tipo:
+                    continue
+                
+                items = costos_por_tipo[tipo_key]
+                subtotal = sum(c.monto for c in items)
+                total_general += subtotal
+                
+                elements.append(Paragraph(tipos.get(tipo_key, tipo_key), styles['SectionHeader']))
+                
+                data = [['Concepto', 'Monto']]
+                for costo in items:
+                    data.append([
+                        costo.concepto,
+                        _format_currency(costo.monto)
+                    ])
+                data.append([f'Subtotal {tipo_key}', _format_currency(subtotal)])
+                
+                col_widths = [10*cm, 4*cm]
+                table = Table(data, colWidths=col_widths)
+                
+                tipo_colors = {'SP': '#fef3c7', 'GIF': '#dbeafe', 'DEP': '#fce7f3'}
+                
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor(tipo_colors.get(tipo_key, '#e5e7eb'))),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                
+                elements.append(table)
+                elements.append(Spacer(1, 0.5*cm))
+            
+            # Total general
+            elements.append(Spacer(1, 0.5*cm))
+            elements.append(Paragraph(f"TOTAL COSTOS INDIRECTOS: {_format_currency(total_general)}", styles['HighlightText']))
+        
+        # Construir PDF
+        title = f"Costos Indirectos - {MESES_NOMBRE[mes_num]} {año}"
+        doc.build(elements, onFirstPage=lambda c, d: _add_pdf_header_footer(c, d, title),
+                  onLaterPages=lambda c, d: _add_pdf_header_footer(c, d, title))
+        
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'costos_indirectos_{mes}.pdf'
+        )
+        
+    except Exception as e:
+        logger.exception("exportar_pdf_costos_indirectos.error")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/exportar/pdf/resumen', methods=['GET'])
+def exportar_pdf_resumen_mensual():
+    """
+    Exporta el resumen mensual (dashboard) a PDF.
+    
+    Query params:
+    - mes: Mes a exportar (YYYY-MM)
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        
+        mes = request.args.get('mes', f"{date.today().year}-{date.today().month:02d}")
+        año, mes_num = map(int, mes.split('-'))
+        
+        # Obtener datos del resumen
+        # Productos activos
+        total_productos = Producto.query.filter_by(activo=True).count()
+        
+        # Materias primas
+        total_mp = MateriaPrima.query.filter_by(activo=True).count()
+        
+        # Producción del mes
+        producciones = ProduccionProgramada.query.filter(
+            extract('year', ProduccionProgramada.fecha_programacion) == año,
+            extract('month', ProduccionProgramada.fecha_programacion) == mes_num
+        ).all()
+        
+        total_batches = sum(p.cantidad_batches for p in producciones)
+        total_kg = sum(p.cantidad_batches * p.producto.peso_batch_kg for p in producciones)
+        
+        # Costo total estimado
+        costo_total = 0
+        for prod in producciones:
+            costeo = prod.producto.get_costeo()
+            costo_total += prod.cantidad_batches * costeo['resumen']['total_neto']
+        
+        # Costos indirectos
+        costos_indirectos = CostoIndirecto.query.filter_by(mes_base=mes).all()
+        total_indirectos = sum(c.monto for c in costos_indirectos)
+        
+        # Crear PDF en memoria
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=2*cm,
+            leftMargin=2*cm,
+            topMargin=2.5*cm,
+            bottomMargin=2*cm
+        )
+        
+        styles = _get_pdf_styles()
+        elements = []
+        
+        # Título
+        elements.append(Paragraph("RESUMEN MENSUAL", styles['ReportTitle']))
+        elements.append(Paragraph(f"{MESES_NOMBRE[mes_num]} {año}", styles['ReportSubtitle']))
+        
+        # Indicadores principales
+        elements.append(Paragraph("Indicadores Principales", styles['SectionHeader']))
+        
+        kpi_data = [
+            ['Productos Activos', 'Materias Primas', 'Batches Programados', 'Producción (Kg)'],
+            [str(total_productos), str(total_mp), str(total_batches), f"{total_kg:,.2f}"]
+        ]
+        
+        kpi_table = Table(kpi_data, colWidths=[4*cm, 4*cm, 4*cm, 4*cm])
+        kpi_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 1), (-1, 1), 18),
+            ('TEXTCOLOR', (0, 1), (-1, 1), colors.HexColor('#0f766e')),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#f0fdfa')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ]))
+        elements.append(kpi_table)
+        elements.append(Spacer(1, 1*cm))
+        
+        # Resumen financiero
+        elements.append(Paragraph("Resumen Financiero", styles['SectionHeader']))
+        
+        fin_data = [
+            ['Concepto', 'Monto'],
+            ['Costo Variable Total (Producción)', _format_currency(costo_total)],
+            ['Costos Indirectos del Mes', _format_currency(total_indirectos)],
+            ['', ''],
+            ['COSTO TOTAL ESTIMADO', _format_currency(costo_total + total_indirectos)],
+        ]
+        
+        if total_kg > 0:
+            costo_promedio_kg = (costo_total + total_indirectos) / total_kg
+            fin_data.append(['Costo Promedio por Kg', _format_currency(costo_promedio_kg)])
+        
+        fin_table = Table(fin_data, colWidths=[10*cm, 5*cm])
+        fin_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (0, -2), (-1, -1), colors.HexColor('#0f766e')),
+            ('BACKGROUND', (0, -2), (-1, -1), colors.HexColor('#ccfbf1')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(fin_table)
+        
+        # Top productos (si hay producción)
+        if producciones:
+            elements.append(Spacer(1, 1*cm))
+            elements.append(Paragraph("Producción por Producto", styles['SectionHeader']))
+            
+            # Agrupar por producto
+            prod_agrupado = {}
+            for prod in producciones:
+                p_id = prod.producto_id
+                if p_id not in prod_agrupado:
+                    prod_agrupado[p_id] = {
+                        'nombre': prod.producto.nombre,
+                        'codigo': prod.producto.codigo,
+                        'batches': 0,
+                        'kg': 0
+                    }
+                prod_agrupado[p_id]['batches'] += prod.cantidad_batches
+                prod_agrupado[p_id]['kg'] += prod.cantidad_batches * prod.producto.peso_batch_kg
+            
+            prod_data = [['Código', 'Producto', 'Batches', 'Kg']]
+            for p_data in sorted(prod_agrupado.values(), key=lambda x: -x['kg'])[:10]:
+                prod_data.append([
+                    p_data['codigo'],
+                    p_data['nombre'][:25] + '...' if len(p_data['nombre']) > 25 else p_data['nombre'],
+                    str(p_data['batches']),
+                    f"{p_data['kg']:,.2f}"
+                ])
+            
+            prod_table = Table(prod_data, colWidths=[2.5*cm, 7*cm, 2.5*cm, 3.5*cm])
+            prod_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            elements.append(prod_table)
+        
+        # Construir PDF
+        title = f"Resumen - {MESES_NOMBRE[mes_num]} {año}"
+        doc.build(elements, onFirstPage=lambda c, d: _add_pdf_header_footer(c, d, title),
+                  onLaterPages=lambda c, d: _add_pdf_header_footer(c, d, title))
+        
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'resumen_mensual_{mes}.pdf'
+        )
+        
+    except Exception as e:
+        logger.exception("exportar_pdf_resumen_mensual.error")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/proyeccion-multiperiodo', methods=['POST'])
 def proyeccion_multiperiodo():
     """

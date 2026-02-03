@@ -3,6 +3,7 @@ import {
     costosIndirectosApi,
     inflacionApi,
     produccionApi,
+    exportarApi,
     formatCurrency,
     formatNumber
 } from '../services/api'
@@ -21,7 +22,8 @@ import {
     X,
     Lightbulb,
     CheckCircle,
-    XCircle
+    XCircle,
+    FileText
 } from 'lucide-react'
 import './CostosIndirectos.css'
 
@@ -277,6 +279,13 @@ function CostosIndirectos() {
                     <p className="page-subtitle">Gastos de conversión y distribución por período cerrado</p>
                 </div>
                 <div className="header-actions">
+                    <button
+                        className="btn btn-outline d-flex align-items-center gap-2"
+                        onClick={() => exportarApi.pdfCostosIndirectos(mesPeriodo)}
+                        title="Descargar costos indirectos en PDF"
+                    >
+                        <FileText size={18} /> PDF
+                    </button>
                     <button className="btn btn-secondary d-flex align-items-center gap-2" onClick={() => setShowInflacionModal(true)}>
                         <TrendingUp size={18} /> Inflación Proyectada
                     </button>
