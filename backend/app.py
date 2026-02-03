@@ -3274,8 +3274,8 @@ def exportar_pdf_produccion():
                 data.append([
                     prod.fecha_programacion.strftime('%d/%m/%Y') if prod.fecha_programacion else '',
                     producto.codigo,
-                    producto.nombre[:30] + '...' if len(producto.nombre) > 30 else producto.nombre,
-                    str(prod.cantidad_batches),
+                    producto.nombre[:25] + '...' if len(producto.nombre) > 25 else producto.nombre,
+                    f"{prod.cantidad_batches:.2f}",
                     f"{kg_total:,.2f}",
                     _format_currency(costo_total)
                 ])
@@ -3285,10 +3285,10 @@ def exportar_pdf_produccion():
                 total_costo += costo_total
             
             # Fila de totales
-            data.append(['', '', 'TOTALES', str(total_batches), f"{total_kg:,.2f}", _format_currency(total_costo)])
+            data.append(['', '', 'TOTALES', f"{total_batches:.2f}", f"{total_kg:,.2f}", _format_currency(total_costo)])
             
             # Crear tabla
-            col_widths = [2.2*cm, 2*cm, 5*cm, 2*cm, 2.5*cm, 3*cm]
+            col_widths = [2*cm, 1.5*cm, 4.5*cm, 2*cm, 2.5*cm, 3*cm]
             table = Table(data, colWidths=col_widths)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d9488')),
@@ -3695,7 +3695,7 @@ def exportar_pdf_costos_indirectos():
                 data = [['Concepto', 'Monto']]
                 for costo in items:
                     data.append([
-                        costo.concepto,
+                        costo.cuenta,
                         _format_currency(costo.monto)
                     ])
                 data.append([f'Subtotal {tipo_key}', _format_currency(subtotal)])
