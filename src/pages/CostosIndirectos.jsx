@@ -86,7 +86,8 @@ function CostosIndirectos() {
         cuenta: '',
         descripcion: '',
         monto: '',
-        tipo_distribucion: 'GIF'
+        tipo_distribucion: 'GIF',
+        es_variable: false
     })
 
     // Inflación states
@@ -163,7 +164,7 @@ function CostosIndirectos() {
     }
 
     function resetForm() {
-        setFormData({ cuenta: '', descripcion: '', monto: '', tipo_distribucion: 'GIF' })
+        setFormData({ cuenta: '', descripcion: '', monto: '', tipo_distribucion: 'GIF', es_variable: false })
         setEditingId(null)
         setShowForm(false)
     }
@@ -173,7 +174,8 @@ function CostosIndirectos() {
             cuenta: costo.cuenta,
             descripcion: costo.descripcion || '',
             monto: costo.monto.toString(),
-            tipo_distribucion: costo.tipo_distribucion
+            tipo_distribucion: costo.tipo_distribucion,
+            es_variable: costo.es_variable || false
         })
         setEditingId(costo.id)
         setShowForm(true)
@@ -396,9 +398,16 @@ function CostosIndirectos() {
                                                 {c.descripcion && <div className="text-muted text-sm">{c.descripcion}</div>}
                                             </td>
                                             <td>
-                                                <span className={`tipo-badge tipo-${c.tipo_distribucion.toLowerCase()}`}>
-                                                    {c.tipo_distribucion}
-                                                </span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span className={`tipo-badge tipo-${c.tipo_distribucion.toLowerCase()}`}>
+                                                        {c.tipo_distribucion}
+                                                    </span>
+                                                    {c.es_variable && (
+                                                        <span className="tipo-badge tipo-var" title="Este costo escala con el volumen de producción">
+                                                            VAR
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="table-number">{formatCurrency(c.monto)}</td>
                                             <td className="table-actions">
@@ -483,7 +492,7 @@ function CostosIndirectos() {
                             <h3 className="modal-title">{editingId ? 'Editar Costo' : 'Nuevo Costo Indirecto'}</h3>
                             <button className="modal-close" onClick={() => resetForm()}><X size={20} /></button>
                         </div>
-                        <form onSubmit={handleSubmit}>
+                        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                             <div className="modal-body">
                                 <div className="form-group">
                                     <label className="form-label">Cuenta / Concepto *</label>
@@ -532,8 +541,43 @@ function CostosIndirectos() {
                                         </select>
                                     </div>
                                 </div>
-                                <div className="tipo-info d-flex align-items-center gap-2">
+                                <div className="tipo-info d-flex align-items-center gap-2" style={{ marginBottom: '20px' }}>
                                     <Lightbulb size={16} /> {TIPOS_DISTRIBUCION.find(t => t.value === formData.tipo_distribucion)?.description}
+                                </div>
+                                <div className="form-group" style={{
+                                    background: '#f0fdf4',
+                                    border: '1px solid #bbf7d0',
+                                    borderRadius: '8px',
+                                    padding: '15px'
+                                }}>
+                                    <label style={{
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: '12px',
+                                        cursor: 'pointer',
+                                        width: '100%'
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.es_variable}
+                                            onChange={e => setFormData({ ...formData, es_variable: e.target.checked })}
+                                            style={{
+                                                width: '20px',
+                                                height: '20px',
+                                                marginTop: '2px',
+                                                accentColor: '#16a34a',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: 'bold', color: '#166534', marginBottom: '4px' }}>
+                                                Es Costo Variable
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: '#15803d', lineHeight: '1.4' }}>
+                                                Marcar si este costo aumenta proporcionalmente con la producción (ej: insumos, energía).
+                                            </div>
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
                             <div className="modal-footer">

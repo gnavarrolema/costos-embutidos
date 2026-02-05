@@ -1,0 +1,187 @@
+"""Tests para la funcionalidad de costos indirectos fijos vs variables."""
+
+from app import db, CostoIndirecto
+
+
+def test_costo_indirecto_es_variable_default_false(client):
+    """Verifica que es_variable sea False por defecto."""
+    # Crear costo sin especificar es_variable
+    resp = client.post('/api/costos-indirectos', json={
+        'cuenta': 'Seguros',
+        'monto': 1000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-01'
+    })
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert data['es_variable'] == False
+
+
+def test_costo_indirecto_crear_con_es_variable_true(client):
+    """Verifica que se puede crear un costo marcado como variable."""
+    resp = client.post('/api/costos-indirectos', json={
+        'cuenta': 'Energía Eléctrica',
+        'monto': 5000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-01',
+        'es_variable': True
+    })
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert data['es_variable'] == True
+
+
+def test_costo_indirecto_actualizar_es_variable(client):
+    """Verifica que se puede actualizar el campo es_variable."""
+    # Crear costo como fijo
+    resp = client.post('/api/costos-indirectos', json={
+        'cuenta': 'Gas Natural',
+        'monto': 3000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-01',
+        'es_variable': False
+    })
+    assert resp.status_code == 201
+    costo_id = resp.get_json()['id']
+    
+    # Actualizar a variable
+    resp = client.put(f'/api/costos-indirectos/{costo_id}', json={
+        'es_variable': True
+    })
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['es_variable'] == True
+
+
+def test_resumen_incluye_fijos_y_variables(client):
+    """Verifica que el resumen incluya desglose de fijos y variables."""
+    # Crear costos fijos
+    client.post('/api/costos-indirectos', json={
+        'cuenta': 'Alquiler',
+        'monto': 10000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-02',
+        'es_variable': False
+    })
+    client.post('/api/costos-indirectos', json={
+        'cuenta': 'Seguros',
+        'monto': 5000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-02',
+        'es_variable': False
+    })
+    
+    # Crear costos variables
+    client.post('/api/costos-indirectos', json={
+        'cuenta': 'Energía',
+        'monto': 8000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-02',
+        'es_variable': True
+    })
+    client.post('/api/costos-indirectos', json={
+        'cuenta': 'Gas',
+        'monto': 2000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-02',
+        'es_variable': True
+    })
+    
+    # Obtener resumen
+    resp = client.get('/api/costos-indirectos/resumen?mes_base=2025-02')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    
+    assert data['total_fijos'] == 15000.0  # 10000 + 5000
+    assert data['total_variables'] == 10000.0  # 8000 + 2000
+    assert data['total'] == 25000.0
+
+
+def test_distribucion_escala_costos_variables(client):
+    """
+    Verifica que los costos variables escalan proporcionalmente con el volumen.
+    
+    Setup:
+    - Mes base (2025-03): 1000 kg producidos, costo variable $10,000
+    - Mes proyección (2025-04): 1500 kg producidos (factor 1.5)
+    
+    Esperado:
+    - Factor = 1.5
+    - Costo variable escalado = $15,000
+    - Costo fijo sin cambio = $5,000
+    """
+    from app import db, Producto, ProduccionProgramada, Categoria
+    from datetime import date
+    
+    # Setup: Crear categoría y producto
+    categoria = Categoria(nombre='TEST_CAT', tipo='DIRECTA')
+    db.session.add(categoria)
+    db.session.commit()
+    
+    producto = Producto(
+        codigo='TEST001',
+        nombre='Producto Test',
+        peso_batch_kg=100.0,
+        porcentaje_merma=0,
+        min_mo_kg=0.5,
+        activo=True
+    )
+    db.session.add(producto)
+    db.session.commit()
+    
+    # Producción mes base: 10 batches = 1000 kg
+    prod_base = ProduccionProgramada(
+        producto_id=producto.id,
+        cantidad_batches=10.0,
+        fecha_programacion=date(2025, 3, 15)
+    )
+    db.session.add(prod_base)
+    
+    # Producción mes proyección: 15 batches = 1500 kg (factor 1.5)
+    prod_proyectado = ProduccionProgramada(
+        producto_id=producto.id,
+        cantidad_batches=15.0,
+        fecha_programacion=date(2025, 4, 15)
+    )
+    db.session.add(prod_proyectado)
+    db.session.commit()
+    
+    # Crear costo FIJO (no debe escalar)
+    client.post('/api/costos-indirectos', json={
+        'cuenta': 'Alquiler Test',
+        'monto': 5000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-03',
+        'es_variable': False
+    })
+    
+    # Crear costo VARIABLE (debe escalar)
+    client.post('/api/costos-indirectos', json={
+        'cuenta': 'Energía Test',
+        'monto': 10000.0,
+        'tipo_distribucion': 'GIF',
+        'mes_base': '2025-03',
+        'es_variable': True
+    })
+    
+    # Llamar endpoint de distribución
+    resp = client.get('/api/distribucion-costos?mes_base=2025-03&mes_produccion=2025-04')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    
+    # Verificar factor de escalamiento
+    assert 'escalamiento' in data
+    assert data['escalamiento']['factor'] == 1.5  # 1500/1000
+    assert data['escalamiento']['volumen_base_kg'] == 1000.0
+    assert data['escalamiento']['volumen_proyectado_kg'] == 1500.0
+    
+    # Verificar que los fijos no escalaron
+    assert data['escalamiento']['total_fijos'] == 5000.0
+    
+    # Verificar que los variables escalaron
+    assert data['escalamiento']['total_variables_base'] == 10000.0
+    assert data['escalamiento']['total_variables_escalados'] == 15000.0  # 10000 * 1.5
+    
+    # Verificar total indirectos = fijos + variables escalados = 5000 + 15000 = 20000
+    assert data['totales']['total_indirectos'] == 20000.0
+

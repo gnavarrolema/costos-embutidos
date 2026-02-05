@@ -156,6 +156,72 @@ def validate_month_format(mes_str, field_name='mes'):
         return año, mes, None
     except (ValueError, TypeError):
         return None, None, f'{field_name} debe tener formato YYYY-MM (ej: 2025-01)'
+
+
+def calcular_costos_con_escalamiento(costos, volumen_base_kg, volumen_proyectado_kg):
+    """
+    Calcula los totales de costos indirectos aplicando escalamiento a costos variables.
+    
+    Los costos FIJOS permanecen sin cambio.
+    Los costos VARIABLES escalan proporcionalmente al volumen de producción.
+    
+    Args:
+        costos: Lista de objetos CostoIndirecto
+        volumen_base_kg: Kg producidos en el mes base (referencia)
+        volumen_proyectado_kg: Kg proyectados para el mes de cálculo
+    
+    Returns:
+        dict con:
+            - totales_base: {SP, GIF, DEP} montos originales
+            - totales_escalados: {SP, GIF, DEP} montos después del escalamiento
+            - total_fijos: suma de costos fijos
+            - total_variables_base: suma de costos variables antes de escalar
+            - total_variables_escalados: suma de costos variables después de escalar
+            - factor_escalamiento: factor aplicado a costos variables
+    """
+    # Inicializar totales
+    totales_base = {'SP': 0, 'GIF': 0, 'DEP': 0}
+    totales_fijos = {'SP': 0, 'GIF': 0, 'DEP': 0}
+    totales_variables = {'SP': 0, 'GIF': 0, 'DEP': 0}
+    
+    for c in costos:
+        tipo = c.tipo_distribucion
+        if tipo in totales_base:
+            totales_base[tipo] += c.monto
+            if c.es_variable:
+                totales_variables[tipo] += c.monto
+            else:
+                totales_fijos[tipo] += c.monto
+    
+    # Calcular factor de escalamiento
+    # Solo aplicar si hay volumen base > 0, de lo contrario factor = 1.0
+    if volumen_base_kg and volumen_base_kg > 0 and volumen_proyectado_kg:
+        factor = volumen_proyectado_kg / volumen_base_kg
+    else:
+        factor = 1.0
+    
+    # Aplicar escalamiento solo a variables
+    totales_escalados = {}
+    for tipo in ['SP', 'GIF', 'DEP']:
+        # Fijos + (Variables * factor)
+        totales_escalados[tipo] = totales_fijos[tipo] + (totales_variables[tipo] * factor)
+    
+    total_fijos = sum(totales_fijos.values())
+    total_variables_base = sum(totales_variables.values())
+    total_variables_escalados = total_variables_base * factor
+    
+    return {
+        'totales_base': totales_base,
+        'totales_escalados': totales_escalados,
+        'total_fijos': total_fijos,
+        'total_variables_base': total_variables_base,
+        'total_variables_escalados': total_variables_escalados,
+        'factor_escalamiento': round(factor, 4),
+        'volumen_base_kg': volumen_base_kg,
+        'volumen_proyectado_kg': volumen_proyectado_kg
+    }
+
+
 # Configurar CORS según entorno
 FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
 
@@ -224,7 +290,7 @@ default_db_uri = f'sqlite:///{os.path.join(basedir, "costos_embutidos.db")}'
 db_uri = os.environ.get('SQLALCHEMY_DATABASE_URI') or \
          os.environ.get('COSTOS_EMBUTIDOS_DATABASE_URI') or \
          default_db_uri
-if db_uri.startswith('sqlite:///') and not db_uri.startswith('sqlite:////'):  # ruta relativa
+if db_uri.startswith('sqlite:///') and not db_uri.startswith('sqlite:////') and ':memory:' not in db_uri:
     # Extraer la ruta relativa y convertirla a absoluta
     relative_path = db_uri.replace('sqlite:///', '')
     if not os.path.isabs(relative_path):
@@ -1939,14 +2005,38 @@ def proyeccion_hibrida():
                     })
         
         # 4. Calcular costos si tenemos mes_base
+        factor_escalamiento = 1.0
         if mes_base and mix_produccion:
             # Obtener costos indirectos
             costos = CostoIndirecto.query.filter_by(mes_base=mes_base).all()
             
             if costos:
-                total_sp = sum(c.monto for c in costos if c.tipo_distribucion == 'SP')
-                total_gif = sum(c.monto for c in costos if c.tipo_distribucion == 'GIF')
-                total_dep = sum(c.monto for c in costos if c.tipo_distribucion == 'DEP')
+                # Parsear mes_base para obtener año y mes
+                año_base, mes_base_num = map(int, mes_base.split('-'))
+                
+                # Obtener producción del mes base para escalamiento
+                fecha_inicio_base = date(año_base, mes_base_num, 1)
+                if mes_base_num == 12:
+                    fecha_fin_base = date(año_base + 1, 1, 1)
+                else:
+                    fecha_fin_base = date(año_base, mes_base_num + 1, 1)
+                
+                producciones_mes_base = ProduccionProgramada.query.filter(
+                    ProduccionProgramada.fecha_programacion >= fecha_inicio_base,
+                    ProduccionProgramada.fecha_programacion < fecha_fin_base
+                ).all()
+                
+                volumen_base_kg = sum(
+                    p.cantidad_batches * p.producto.peso_batch_kg 
+                    for p in producciones_mes_base
+                )
+                
+                # Calcular volumen proyectado del mix
+                total_kg_mix = sum(p['cantidad_kg'] for p in mix_produccion)
+                
+                # Usar helper para calcular costos con escalamiento
+                escalamiento = calcular_costos_con_escalamiento(costos, volumen_base_kg, total_kg_mix)
+                factor_escalamiento = escalamiento['factor_escalamiento']
                 
                 # Calcular inflación acumulada
                 inflacion_acumulada = 1.0
@@ -1958,10 +2048,10 @@ def proyeccion_hibrida():
                     for inf in inflaciones:
                         inflacion_acumulada *= (1 + inf.porcentaje / 100)
                 
-                # Ajustar costos por inflación
-                total_sp_aj = total_sp * inflacion_acumulada
-                total_gif_aj = total_gif * inflacion_acumulada
-                total_dep_aj = total_dep * inflacion_acumulada
+                # Aplicar inflación a costos escalados
+                total_sp_aj = escalamiento['totales_escalados']['SP'] * inflacion_acumulada
+                total_gif_aj = escalamiento['totales_escalados']['GIF'] * inflacion_acumulada
+                total_dep_aj = escalamiento['totales_escalados']['DEP'] * inflacion_acumulada
                 
                 # Calcular totales del mix
                 total_kg_mes = sum(p['cantidad_kg'] for p in mix_produccion)
@@ -2025,7 +2115,8 @@ def proyeccion_hibrida():
                 'productos_programados': count_programados,
                 'productos_ml': count_ml,
                 'total_productos': len(mix_produccion),
-                'total_kg': round(total_kg, 2)
+                'total_kg': round(total_kg, 2),
+                'factor_escalamiento': factor_escalamiento
             }
         })
         
@@ -2087,7 +2178,8 @@ def create_costo_indirecto():
         descripcion=data.get('descripcion', ''),
         monto=monto,
         tipo_distribucion=data['tipo_distribucion'],
-        mes_base=data['mes_base']
+        mes_base=data['mes_base'],
+        es_variable=data.get('es_variable', False)
     )
     db.session.add(costo)
     db.session.commit()
@@ -2119,6 +2211,10 @@ def update_costo_indirecto(id):
     costo.cuenta = data.get('cuenta', costo.cuenta)
     costo.descripcion = data.get('descripcion', costo.descripcion)
     
+    # Actualizar es_variable si se proporciona
+    if 'es_variable' in data:
+        costo.es_variable = bool(data['es_variable'])
+    
     db.session.commit()
     return jsonify(costo.to_dict())
 
@@ -2144,14 +2240,23 @@ def get_resumen_costos_indirectos():
     
     # Agrupar por tipo
     por_tipo = {'SP': 0, 'GIF': 0, 'DEP': 0}
+    total_fijos = 0
+    total_variables = 0
+    
     for c in costos:
         if c.tipo_distribucion in por_tipo:
             por_tipo[c.tipo_distribucion] += c.monto
+        if c.es_variable:
+            total_variables += c.monto
+        else:
+            total_fijos += c.monto
     
     return jsonify({
         'mes_base': mes_base,
         'total': sum(por_tipo.values()),
         'por_tipo': por_tipo,
+        'total_fijos': total_fijos,
+        'total_variables': total_variables,
         'cantidad_cuentas': len(costos)
     })
 
@@ -2256,7 +2361,28 @@ def calcular_distribucion_costos():
         if not costos:
             return jsonify({'error': f'No hay costos cargados para el mes base {mes_base}'}), 404
         
-        # Calcular totales de costos por tipo
+        # ===== OBTENER PRODUCCIÓN DEL MES BASE PARA ESCALAMIENTO =====
+        fecha_inicio_base = date(año_base, mes_base_num, 1)
+        if mes_base_num == 12:
+            fecha_fin_base = date(año_base + 1, 1, 1)
+        else:
+            fecha_fin_base = date(año_base, mes_base_num + 1, 1)
+        
+        producciones_base = ProduccionProgramada.query.filter(
+            ProduccionProgramada.fecha_programacion >= fecha_inicio_base,
+            ProduccionProgramada.fecha_programacion < fecha_fin_base
+        ).all()
+        
+        # Calcular volumen del mes base
+        volumen_base_kg = sum(
+            p.cantidad_batches * p.producto.peso_batch_kg 
+            for p in producciones_base
+        )
+        
+        # Calcular volumen del mes proyectado (lo calcularemos más adelante con producciones)
+        # Por ahora inicializamos en 0, se actualizará después de procesar producciones
+        
+        # Calcular totales de costos por tipo (sin escalamiento aún, lo hacemos después)
         total_sp = sum(c.monto for c in costos if c.tipo_distribucion == 'SP')
         total_gif = sum(c.monto for c in costos if c.tipo_distribucion == 'GIF')
         total_dep = sum(c.monto for c in costos if c.tipo_distribucion == 'DEP')
@@ -2274,11 +2400,6 @@ def calcular_distribucion_costos():
             
             for inf in inflaciones:
                 inflacion_acumulada *= (1 + inf.porcentaje / 100)
-        
-        # Ajustar costos por inflación
-        total_sp_ajustado = total_sp * inflacion_acumulada
-        total_gif_ajustado = total_gif * inflacion_acumulada
-        total_dep_ajustado = total_dep * inflacion_acumulada
         
         # Calcular totales de producción
         total_kg = 0
@@ -2303,6 +2424,16 @@ def calcular_distribucion_costos():
             produccion_por_producto[producto.id]['kg'] += kg_producido
             produccion_por_producto[producto.id]['minutos'] += minutos
             produccion_por_producto[producto.id]['batches'] += prod.cantidad_batches
+        
+        # ===== APLICAR ESCALAMIENTO A COSTOS VARIABLES =====
+        # Usar el helper para calcular costos con escalamiento
+        escalamiento = calcular_costos_con_escalamiento(costos, volumen_base_kg, total_kg)
+        factor_escalamiento = escalamiento['factor_escalamiento']
+        
+        # Aplicar inflación a los costos ya escalados
+        total_sp_ajustado = escalamiento['totales_escalados']['SP'] * inflacion_acumulada
+        total_gif_ajustado = escalamiento['totales_escalados']['GIF'] * inflacion_acumulada
+        total_dep_ajustado = escalamiento['totales_escalados']['DEP'] * inflacion_acumulada
         
         # Distribuir costos
         distribucion = []
@@ -2368,6 +2499,14 @@ def calcular_distribucion_costos():
             'mes_base': mes_base,
             'mes_produccion': mes_produccion,
             'inflacion_acumulada': round((inflacion_acumulada - 1) * 100, 2),
+            'escalamiento': {
+                'factor': factor_escalamiento,
+                'volumen_base_kg': round(volumen_base_kg, 2),
+                'volumen_proyectado_kg': round(total_kg, 2),
+                'total_fijos': round(escalamiento['total_fijos'], 2),
+                'total_variables_base': round(escalamiento['total_variables_base'], 2),
+                'total_variables_escalados': round(escalamiento['total_variables_escalados'], 2),
+            },
             'totales': {
                 'kg': round(total_kg, 2),
                 'minutos': round(total_minutos, 2),
