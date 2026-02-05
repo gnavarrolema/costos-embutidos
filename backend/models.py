@@ -359,6 +359,22 @@ def init_db(app):
         # Flask-SQLAlchemy 3.x: create_all() es idempotente por defecto
         db.create_all()
         
+        # ===== MIGRACIONES MANUALES =====
+        # Agregar columna es_variable a costo_indirecto si no existe
+        try:
+            from sqlalchemy import text, inspect
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('costo_indirecto')]
+            
+            if 'es_variable' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text('ALTER TABLE costo_indirecto ADD COLUMN es_variable BOOLEAN DEFAULT 0'))
+                    conn.commit()
+                print("✅ Migración: columna es_variable agregada a costo_indirecto")
+        except Exception as e:
+            # Ignorar si la tabla no existe aún o hay otro error
+            print(f"⚠️ Migración es_variable: {e}")
+        
         # Crear usuario administrador por defecto si no existe ninguno
         if Usuario.query.count() == 0:
             admin = Usuario(
@@ -383,3 +399,4 @@ def init_db(app):
             db.session.add_all(categorias)
             db.session.commit()
             print("✅ Categorías iniciales creadas")
+
