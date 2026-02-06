@@ -360,17 +360,17 @@ def init_db(app):
         db.create_all()
         
         # ===== MIGRACIONES MANUALES =====
-        # Agregar columna es_variable a costo_indirecto si no existe
+        # Agregar columna es_variable a costos_indirectos si no existe
         try:
             from sqlalchemy import text, inspect
             inspector = inspect(db.engine)
-            columns = [col['name'] for col in inspector.get_columns('costo_indirecto')]
+            columns = [col['name'] for col in inspector.get_columns('costos_indirectos')]
             
             if 'es_variable' not in columns:
                 with db.engine.connect() as conn:
-                    conn.execute(text('ALTER TABLE costo_indirecto ADD COLUMN es_variable BOOLEAN DEFAULT 0'))
+                    conn.execute(text('ALTER TABLE costos_indirectos ADD COLUMN es_variable BOOLEAN DEFAULT 0'))
                     conn.commit()
-                print("✅ Migración: columna es_variable agregada a costo_indirecto")
+                print("✅ Migración: columna es_variable agregada a costos_indirectos")
         except Exception as e:
             # Ignorar si la tabla no existe aún o hay otro error
             print(f"⚠️ Migración es_variable: {e}")
