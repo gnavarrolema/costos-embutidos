@@ -316,6 +316,7 @@ class CostoIndirecto(db.Model):
     tipo_distribucion = db.Column(db.String(10), nullable=False)  # SP (mano obra), GIF (por kg), DEP
     mes_base = db.Column(db.String(7), nullable=False)  # YYYY-MM
     es_variable = db.Column(db.Boolean, default=False)  # True = escala con volumen de producción
+    variacion_max_pct = db.Column(db.Float, nullable=True)  # Límite máximo de variación en porcentaje (ej: 80 para 80%)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
     __table_args__ = (
@@ -331,6 +332,7 @@ class CostoIndirecto(db.Model):
             'tipo_distribucion': self.tipo_distribucion,
             'mes_base': self.mes_base,
             'es_variable': self.es_variable,
+            'variacion_max_pct': self.variacion_max_pct,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None
         }
 
@@ -371,6 +373,13 @@ def init_db(app):
                     conn.execute(text('ALTER TABLE costos_indirectos ADD COLUMN es_variable BOOLEAN DEFAULT 0'))
                     conn.commit()
                 print("✅ Migración: columna es_variable agregada a costos_indirectos")
+            
+            # Agregar columna variacion_max_pct si no existe
+            if 'variacion_max_pct' not in columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text('ALTER TABLE costos_indirectos ADD COLUMN variacion_max_pct FLOAT'))
+                    conn.commit()
+                print("✅ Migración: columna variacion_max_pct agregada a costos_indirectos")
         except Exception as e:
             # Ignorar si la tabla no existe aún o hay otro error
             print(f"⚠️ Migración es_variable: {e}")

@@ -87,7 +87,8 @@ function CostosIndirectos() {
         descripcion: '',
         monto: '',
         tipo_distribucion: 'GIF',
-        es_variable: false
+        es_variable: false,
+        variacion_max_pct: ''
     })
 
     // Inflación states
@@ -134,7 +135,8 @@ function CostosIndirectos() {
             const data = {
                 ...formData,
                 monto: parseFloat(formData.monto),
-                mes_base: mesPeriodo
+                mes_base: mesPeriodo,
+                variacion_max_pct: formData.variacion_max_pct ? parseFloat(formData.variacion_max_pct) : null
             }
 
             if (editingId) {
@@ -164,7 +166,7 @@ function CostosIndirectos() {
     }
 
     function resetForm() {
-        setFormData({ cuenta: '', descripcion: '', monto: '', tipo_distribucion: 'GIF', es_variable: false })
+        setFormData({ cuenta: '', descripcion: '', monto: '', tipo_distribucion: 'GIF', es_variable: false, variacion_max_pct: '' })
         setEditingId(null)
         setShowForm(false)
     }
@@ -175,7 +177,8 @@ function CostosIndirectos() {
             descripcion: costo.descripcion || '',
             monto: costo.monto.toString(),
             tipo_distribucion: costo.tipo_distribucion,
-            es_variable: costo.es_variable || false
+            es_variable: costo.es_variable || false,
+            variacion_max_pct: costo.variacion_max_pct ? costo.variacion_max_pct.toString() : ''
         })
         setEditingId(costo.id)
         setShowForm(true)
@@ -560,7 +563,7 @@ function CostosIndirectos() {
                                         <input
                                             type="checkbox"
                                             checked={formData.es_variable}
-                                            onChange={e => setFormData({ ...formData, es_variable: e.target.checked })}
+                                            onChange={e => setFormData({ ...formData, es_variable: e.target.checked, variacion_max_pct: e.target.checked ? formData.variacion_max_pct : '' })}
                                             style={{
                                                 width: '20px',
                                                 height: '20px',
@@ -574,10 +577,37 @@ function CostosIndirectos() {
                                                 Es Costo Variable
                                             </div>
                                             <div style={{ fontSize: '0.85rem', color: '#15803d', lineHeight: '1.4' }}>
-                                                Marcar si este costo aumenta proporcionalmente con la producción (ej: insumos, energía).
+                                                Marcar si este costo aumenta proporcionalmente con la producción (ej: energía, agua).
                                             </div>
                                         </div>
                                     </label>
+
+                                    {/* Campo de variación máxima - solo si es variable */}
+                                    {formData.es_variable && (
+                                        <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px dashed #bbf7d0' }}>
+                                            <label className="form-label" style={{ color: '#166534', marginBottom: '8px', display: 'block' }}>
+                                                Variación máxima (%)
+                                            </label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <input
+                                                    type="number"
+                                                    className="form-input"
+                                                    min="0"
+                                                    max="500"
+                                                    step="5"
+                                                    value={formData.variacion_max_pct}
+                                                    onChange={e => setFormData({ ...formData, variacion_max_pct: e.target.value })}
+                                                    placeholder="Ej: 80"
+                                                    style={{ width: '100px' }}
+                                                />
+                                                <span style={{ color: '#166534' }}>%</span>
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: '#15803d', marginTop: '6px', lineHeight: '1.4' }}>
+                                                Límite máximo de aumento por volumen. Ej: 80% significa que aunque la producción duplique,
+                                                este costo no subirá más del 80%. Deja vacío para sin límite.
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="modal-footer">

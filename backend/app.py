@@ -158,17 +158,23 @@ def validate_month_format(mes_str, field_name='mes'):
         return None, None, f'{field_name} debe tener formato YYYY-MM (ej: 2025-01)'
 
 
-def calcular_costos_con_escalamiento(costos, volumen_base_kg, volumen_proyectado_kg):
+def calcular_costos_con_escalamiento(costos, volumen_base_kg, volumen_proyectado_kg,
+                                       factor_limite_min=0.5, factor_limite_max=3.0):
     """
     Calcula los totales de costos indirectos aplicando escalamiento a costos variables.
     
     Los costos FIJOS permanecen sin cambio.
-    Los costos VARIABLES escalan proporcionalmente al volumen de producción.
+    Los costos VARIABLES escalan según su factor de elasticidad:
+    - factor_elasticidad=1.0 (default): escalamiento lineal
+    - factor_elasticidad=0.5: solo escala 50% del cambio (economías de escala)
+    - factor_elasticidad=1.5: escala 150% del cambio (deseconomías de escala)
     
     Args:
         costos: Lista de objetos CostoIndirecto
         volumen_base_kg: Kg producidos en el mes base (referencia)
         volumen_proyectado_kg: Kg proyectados para el mes de cálculo
+        factor_limite_min: Límite inferior global del factor (default 0.5)
+        factor_limite_max: Límite superior global del factor (default 3.0)
     
     Returns:
         dict con:
@@ -177,38 +183,64 @@ def calcular_costos_con_escalamiento(costos, volumen_base_kg, volumen_proyectado
             - total_fijos: suma de costos fijos
             - total_variables_base: suma de costos variables antes de escalar
             - total_variables_escalados: suma de costos variables después de escalar
-            - factor_escalamiento: factor aplicado a costos variables
+            - factor_escalamiento: factor base aplicado (antes de elasticidad)
     """
     # Inicializar totales
     totales_base = {'SP': 0, 'GIF': 0, 'DEP': 0}
     totales_fijos = {'SP': 0, 'GIF': 0, 'DEP': 0}
-    totales_variables = {'SP': 0, 'GIF': 0, 'DEP': 0}
+    totales_variables_base = {'SP': 0, 'GIF': 0, 'DEP': 0}
     
+    # Separar costos fijos y variables
     for c in costos:
         tipo = c.tipo_distribucion
         if tipo in totales_base:
             totales_base[tipo] += c.monto
             if c.es_variable:
-                totales_variables[tipo] += c.monto
+                totales_variables_base[tipo] += c.monto
             else:
                 totales_fijos[tipo] += c.monto
     
-    # Calcular factor de escalamiento
+    # Calcular factor base de escalamiento
     # Solo aplicar si hay volumen base > 0, de lo contrario factor = 1.0
     if volumen_base_kg and volumen_base_kg > 0 and volumen_proyectado_kg:
-        factor = volumen_proyectado_kg / volumen_base_kg
+        factor_base = volumen_proyectado_kg / volumen_base_kg
+        # Aplicar límites globales al factor base
+        factor_base = max(factor_limite_min, min(factor_base, factor_limite_max))
     else:
-        factor = 1.0
+        factor_base = 1.0
     
-    # Aplicar escalamiento solo a variables
-    totales_escalados = {}
+    # Aplicar escalamiento lineal a costos variables
+    totales_escalados = {'SP': 0, 'GIF': 0, 'DEP': 0}
+    total_variables_escalados = 0
+    
     for tipo in ['SP', 'GIF', 'DEP']:
-        # Fijos + (Variables * factor)
-        totales_escalados[tipo] = totales_fijos[tipo] + (totales_variables[tipo] * factor)
+        # Empezar con los fijos (no escalan)
+        totales_escalados[tipo] = totales_fijos[tipo]
+        
+        # Procesar cada costo variable individualmente
+        for c in [x for x in costos if x.tipo_distribucion == tipo and x.es_variable]:
+            # Obtener límite de variación en porcentaje (ej: 80 significa máximo +80%)
+            variacion_max_pct = getattr(c, 'variacion_max_pct', None)
+            
+            # El factor base ya está calculado (ej: 1.5 = +50% de producción)
+            factor_efectivo = factor_base
+            
+            # Si hay límite de variación, convertir porcentaje a factor máximo
+            # variacion_max_pct=80 → factor máximo = 1.8
+            if variacion_max_pct is not None and variacion_max_pct > 0:
+                factor_max = 1 + (variacion_max_pct / 100)
+                if factor_efectivo > factor_max:
+                    factor_efectivo = factor_max
+            
+            # Asegurar que el factor no sea menor a factor_limite_min
+            factor_efectivo = max(factor_limite_min, factor_efectivo)
+            
+            costo_escalado = c.monto * factor_efectivo
+            totales_escalados[tipo] += costo_escalado
+            total_variables_escalados += costo_escalado
     
     total_fijos = sum(totales_fijos.values())
-    total_variables_base = sum(totales_variables.values())
-    total_variables_escalados = total_variables_base * factor
+    total_variables_base = sum(totales_variables_base.values())
     
     return {
         'totales_base': totales_base,
@@ -216,7 +248,7 @@ def calcular_costos_con_escalamiento(costos, volumen_base_kg, volumen_proyectado
         'total_fijos': total_fijos,
         'total_variables_base': total_variables_base,
         'total_variables_escalados': total_variables_escalados,
-        'factor_escalamiento': round(factor, 4),
+        'factor_escalamiento': round(factor_base, 4),
         'volumen_base_kg': volumen_base_kg,
         'volumen_proyectado_kg': volumen_proyectado_kg
     }
@@ -1113,14 +1145,43 @@ def get_costeo_completo(producto_id):
             costeo_variable['resumen']['costo_total_por_kg'] = costeo_variable['resumen']['costo_por_kg']
             return jsonify(costeo_variable)
         
-        # Calcular totales de costos por tipo
-        total_sp = sum(c.monto for c in costos if c.tipo_distribucion == 'SP')
-        total_gif = sum(c.monto for c in costos if c.tipo_distribucion == 'GIF')
-        total_dep = sum(c.monto for c in costos if c.tipo_distribucion == 'DEP')
-        
-        # Calcular inflación acumulada
+        # Parsear fechas
         año_base, mes_base_num = map(int, mes_base.split('-'))
         año_prod, mes_prod = map(int, mes_produccion.split('-'))
+        
+        # ===== CALCULAR VOLUMEN DEL MES BASE (para escalamiento) =====
+        # PRIORIDAD: Usar ProduccionHistorica (real) si existe, si no ProduccionProgramada
+        
+        # 1. Intentar con producción histórica (real)
+        historico_base = ProduccionHistorica.query.filter(
+            ProduccionHistorica.año == año_base,
+            ProduccionHistorica.mes == mes_base_num
+        ).all()
+        
+        if historico_base:
+            # Usar producción real del mes base
+            volumen_base_kg = sum(h.cantidad_kg for h in historico_base)
+            origen_volumen_base = 'historico'
+        else:
+            # Fallback: usar producción programada del mes base
+            fecha_inicio_base = date(año_base, mes_base_num, 1)
+            if mes_base_num == 12:
+                fecha_fin_base = date(año_base + 1, 1, 1)
+            else:
+                fecha_fin_base = date(año_base, mes_base_num + 1, 1)
+            
+            producciones_base = ProduccionProgramada.query.filter(
+                ProduccionProgramada.fecha_programacion >= fecha_inicio_base,
+                ProduccionProgramada.fecha_programacion < fecha_fin_base
+            ).all()
+            
+            volumen_base_kg = sum(
+                p.cantidad_batches * p.producto.peso_batch_kg 
+                for p in producciones_base
+            )
+            origen_volumen_base = 'programado'
+        
+        # Calcular inflación acumulada
         meses_diferencia = (año_prod - año_base) * 12 + (mes_prod - mes_base_num)
         
         inflacion_acumulada = 1.0
@@ -1131,11 +1192,6 @@ def get_costeo_completo(producto_id):
             ).all()
             for inf in inflaciones:
                 inflacion_acumulada *= (1 + inf.porcentaje / 100)
-        
-        # Ajustar costos por inflación
-        total_sp_ajustado = total_sp * inflacion_acumulada
-        total_gif_ajustado = total_gif * inflacion_acumulada
-        total_dep_ajustado = total_dep * inflacion_acumulada
         
         # Para calcular la distribución, necesitamos el total de producción del mes
         # Usamos la producción programada del mes como referencia
@@ -1176,6 +1232,16 @@ def get_costeo_completo(producto_id):
             total_kg_mes = kg_este_producto
             total_minutos_mes = minutos_este_producto
         
+        # ===== APLICAR ESCALAMIENTO A COSTOS VARIABLES =====
+        # Ahora que tenemos total_kg_mes, escalamos los costos variables
+        escalamiento = calcular_costos_con_escalamiento(costos, volumen_base_kg, total_kg_mes)
+        factor_escalamiento = escalamiento['factor_escalamiento']
+        
+        # Aplicar inflación a los costos ya escalados
+        total_sp_ajustado = escalamiento['totales_escalados']['SP'] * inflacion_acumulada
+        total_gif_ajustado = escalamiento['totales_escalados']['GIF'] * inflacion_acumulada
+        total_dep_ajustado = escalamiento['totales_escalados']['DEP'] * inflacion_acumulada
+        
         # Calcular costo indirecto por kg para este producto
         # Nota: SP se distribuye por minutos (MO). Si no hay minutos (total_minutos_mes==0),
         # hacemos fallback a distribución por kg para evitar sobreasignación (cada producto
@@ -1205,6 +1271,15 @@ def get_costeo_completo(producto_id):
             'mes_base': mes_base,
             'mes_produccion': mes_produccion,
             'inflacion_acumulada_pct': round((inflacion_acumulada - 1) * 100, 2),
+            'escalamiento': {
+                'volumen_base_kg': round(volumen_base_kg, 2),
+                'origen_volumen_base': origen_volumen_base,  # 'historico' o 'programado'
+                'volumen_proyectado_kg': round(total_kg_mes, 2),
+                'factor': factor_escalamiento,
+                'total_fijos': round(escalamiento['total_fijos'], 2),
+                'total_variables_base': round(escalamiento['total_variables_base'], 2),
+                'total_variables_escalados': round(escalamiento['total_variables_escalados'], 2)
+            },
             'costo_sp': round(costo_sp_producto, 2),
             'costo_gif': round(costo_gif_producto, 2),
             'costo_dep': round(costo_dep_producto, 2),
@@ -2179,7 +2254,8 @@ def create_costo_indirecto():
         monto=monto,
         tipo_distribucion=data['tipo_distribucion'],
         mes_base=data['mes_base'],
-        es_variable=data.get('es_variable', False)
+        es_variable=data.get('es_variable', False),
+        variacion_max_pct=data.get('variacion_max_pct')
     )
     db.session.add(costo)
     db.session.commit()
@@ -2214,6 +2290,18 @@ def update_costo_indirecto(id):
     # Actualizar es_variable si se proporciona
     if 'es_variable' in data:
         costo.es_variable = bool(data['es_variable'])
+    
+    # Actualizar variacion_max_pct si se proporciona
+    if 'variacion_max_pct' in data:
+        variacion_max = data['variacion_max_pct']
+        if variacion_max is not None:
+            try:
+                variacion_max = float(variacion_max)
+                if variacion_max < 0:
+                    return jsonify({'error': 'variacion_max_pct no puede ser negativo'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'variacion_max_pct debe ser un número'}), 400
+        costo.variacion_max_pct = variacion_max
     
     db.session.commit()
     return jsonify(costo.to_dict())
@@ -2362,22 +2450,37 @@ def calcular_distribucion_costos():
             return jsonify({'error': f'No hay costos cargados para el mes base {mes_base}'}), 404
         
         # ===== OBTENER PRODUCCIÓN DEL MES BASE PARA ESCALAMIENTO =====
-        fecha_inicio_base = date(año_base, mes_base_num, 1)
-        if mes_base_num == 12:
-            fecha_fin_base = date(año_base + 1, 1, 1)
-        else:
-            fecha_fin_base = date(año_base, mes_base_num + 1, 1)
+        # PRIORIDAD: Usar ProduccionHistorica (real) si existe, si no ProduccionProgramada
         
-        producciones_base = ProduccionProgramada.query.filter(
-            ProduccionProgramada.fecha_programacion >= fecha_inicio_base,
-            ProduccionProgramada.fecha_programacion < fecha_fin_base
+        # 1. Intentar con producción histórica (real)
+        historico_base = ProduccionHistorica.query.filter(
+            ProduccionHistorica.año == año_base,
+            ProduccionHistorica.mes == mes_base_num
         ).all()
         
-        # Calcular volumen del mes base
-        volumen_base_kg = sum(
-            p.cantidad_batches * p.producto.peso_batch_kg 
-            for p in producciones_base
-        )
+        if historico_base:
+            # Usar producción real del mes base
+            volumen_base_kg = sum(h.cantidad_kg for h in historico_base)
+            origen_volumen_base = 'historico'
+        else:
+            # Fallback: usar producción programada del mes base
+            fecha_inicio_base = date(año_base, mes_base_num, 1)
+            if mes_base_num == 12:
+                fecha_fin_base = date(año_base + 1, 1, 1)
+            else:
+                fecha_fin_base = date(año_base, mes_base_num + 1, 1)
+            
+            producciones_base = ProduccionProgramada.query.filter(
+                ProduccionProgramada.fecha_programacion >= fecha_inicio_base,
+                ProduccionProgramada.fecha_programacion < fecha_fin_base
+            ).all()
+            
+            # Calcular volumen del mes base
+            volumen_base_kg = sum(
+                p.cantidad_batches * p.producto.peso_batch_kg 
+                for p in producciones_base
+            )
+            origen_volumen_base = 'programado'
         
         # Calcular volumen del mes proyectado (lo calcularemos más adelante con producciones)
         # Por ahora inicializamos en 0, se actualizará después de procesar producciones
@@ -2502,6 +2605,7 @@ def calcular_distribucion_costos():
             'escalamiento': {
                 'factor': factor_escalamiento,
                 'volumen_base_kg': round(volumen_base_kg, 2),
+                'origen_volumen_base': origen_volumen_base,  # 'historico' o 'programado'
                 'volumen_proyectado_kg': round(total_kg, 2),
                 'total_fijos': round(escalamiento['total_fijos'], 2),
                 'total_variables_base': round(escalamiento['total_variables_base'], 2),
