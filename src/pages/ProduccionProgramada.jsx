@@ -145,13 +145,13 @@ function ProduccionProgramada() {
         const today = new Date()
         const todayYear = today.getFullYear()
         const todayMonth = today.getMonth() + 1
-        // Si el mes seleccionado es el actual, usar la fecha de hoy; sino el último día del mes
+        // Si el mes seleccionado es el actual, usar la fecha de hoy; sino el día 15 (mitad del mes)
         let day
         if (parseInt(year) === todayYear && parseInt(month) === todayMonth) {
             day = String(today.getDate()).padStart(2, '0')
         } else {
-            // Último día del mes seleccionado
-            day = String(new Date(parseInt(year), parseInt(month), 0).getDate()).padStart(2, '0')
+            // Día 15 del mes seleccionado (más intuitivo para planificación)
+            day = '15'
         }
         setFormData(prev => ({
             ...prev,
@@ -489,26 +489,45 @@ function ProduccionProgramada() {
         }
     }
 
-    async function handleTableBatchesChange(id, value) {
+    // Solo actualiza el estado local mientras el usuario escribe
+    function handleTableBatchesLocalChange(id, value) {
         const newCantidad = parseFloat(value) || 0
         updateProduccionLocal(id, { cantidad_batches: newCantidad })
+    }
 
+    function handleTableKgLocalChange(p, value) {
+        const kg = parseFloat(value) || 0
+        const newBatches = p.producto.peso_batch_kg > 0 ? kg / p.producto.peso_batch_kg : 0
+        updateProduccionLocal(p.id, { cantidad_batches: newBatches })
+    }
+
+    // Guarda en el backend cuando el usuario termina de editar (onBlur)
+    async function handleTableBatchesSave(id, value) {
+        const newCantidad = parseFloat(value) || 0
         try {
             await produccionApi.update(id, { cantidad_batches: newCantidad })
+            // Recargar para confirmar persistencia
+            await loadProduccionMes()
         } catch (err) {
-            console.error('Error updating:', err)
+            console.error('Error guardando producción:', err)
+            setMensaje({ type: 'error', text: 'Error al guardar cambios. Intente nuevamente.' })
+            // Recargar para recuperar el valor real del backend
+            await loadProduccionMes()
         }
     }
 
-    async function handleTableKgChange(p, value) {
+    async function handleTableKgSave(p, value) {
         const kg = parseFloat(value) || 0
-        const newBatches = kg / p.producto.peso_batch_kg
-        updateProduccionLocal(p.id, { cantidad_batches: newBatches })
-
+        const newBatches = p.producto.peso_batch_kg > 0 ? kg / p.producto.peso_batch_kg : 0
         try {
             await produccionApi.update(p.id, { cantidad_batches: newBatches })
+            // Recargar para confirmar persistencia
+            await loadProduccionMes()
         } catch (err) {
-            console.error('Error updating:', err)
+            console.error('Error guardando producción:', err)
+            setMensaje({ type: 'error', text: 'Error al guardar cambios. Intente nuevamente.' })
+            // Recargar para recuperar el valor real del backend
+            await loadProduccionMes()
         }
     }
 
@@ -782,7 +801,8 @@ function ProduccionProgramada() {
                                                 type="number"
                                                 className="inline-input"
                                                 value={Number(p.cantidad_batches).toFixed(2)}
-                                                onChange={(e) => handleTableBatchesChange(p.id, e.target.value)}
+                                                onChange={(e) => handleTableBatchesLocalChange(p.id, e.target.value)}
+                                                onBlur={(e) => handleTableBatchesSave(p.id, e.target.value)}
                                                 min="0"
                                                 step="0.01"
                                             />
@@ -792,7 +812,8 @@ function ProduccionProgramada() {
                                                 type="number"
                                                 className="inline-input"
                                                 value={Number(p.pesoTotal).toFixed(0)}
-                                                onChange={(e) => handleTableKgChange(p, e.target.value)}
+                                                onChange={(e) => handleTableKgLocalChange(p, e.target.value)}
+                                                onBlur={(e) => handleTableKgSave(p, e.target.value)}
                                                 min="0"
                                                 step="1"
                                             />
