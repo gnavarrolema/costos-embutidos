@@ -342,7 +342,24 @@ if ':memory:' in db_uri:
         "Esto solo debe usarse para tests."
     )
 
+# Asegurar que el directorio de la BD exista (crítico para GCS FUSE)
+if db_uri.startswith('sqlite:///') and ':memory:' not in db_uri:
+    _db_file_path = db_uri.replace('sqlite:///', '')
+    _db_dir = os.path.dirname(_db_file_path)
+    if _db_dir and not os.path.exists(_db_dir):
+        os.makedirs(_db_dir, exist_ok=True)
+        logger.info("📁 Directorio de BD creado: %s", _db_dir)
+
 # Configuración SQLite para Cloud Storage FUSE (mejor compatibilidad)
+# journal_mode=DELETE es más compatible con FUSE que WAL (no requiere locking POSIX)
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=DELETE")
+    cursor.execute("PRAGMA synchronous=FULL")
+    cursor.close()
+
+from sqlalchemy import event as sa_event
+
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'connect_args': {
         'timeout': 30,  # Timeout más largo para operaciones de red
@@ -371,6 +388,12 @@ if db_uri.startswith('sqlite:///') and ':memory:' not in db_uri:
         )
 
 db.init_app(app)
+
+# Registrar PRAGMA para SQLite (journal_mode y synchronous) en cada conexión
+if 'sqlite' in db_uri and ':memory:' not in db_uri:
+    with app.app_context():
+        sa_event.listen(db.engine, 'connect', _set_sqlite_pragma)
+    logger.info("🔧 SQLite PRAGMA configurado: journal_mode=DELETE, synchronous=FULL")
 
 # ===== BACKUP AUTOMÁTICO DE LA BASE DE DATOS =====
 def _create_db_backup():
