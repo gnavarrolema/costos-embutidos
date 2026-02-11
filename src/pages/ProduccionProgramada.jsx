@@ -142,9 +142,20 @@ function ProduccionProgramada() {
     useEffect(() => {
         loadProduccionMes()
         const [year, month] = mesSeleccionado.split('-')
+        const today = new Date()
+        const todayYear = today.getFullYear()
+        const todayMonth = today.getMonth() + 1
+        // Si el mes seleccionado es el actual, usar la fecha de hoy; sino el último día del mes
+        let day
+        if (parseInt(year) === todayYear && parseInt(month) === todayMonth) {
+            day = String(today.getDate()).padStart(2, '0')
+        } else {
+            // Último día del mes seleccionado
+            day = String(new Date(parseInt(year), parseInt(month), 0).getDate()).padStart(2, '0')
+        }
         setFormData(prev => ({
             ...prev,
-            fecha: `${year}-${month}-01`
+            fecha: `${year}-${month}-${day}`
         }))
     }, [mesSeleccionado])
 

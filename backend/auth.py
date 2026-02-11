@@ -101,12 +101,18 @@ def admin_required(f):
 def init_auth_routes(app):
     """Registra las rutas de autenticación en la aplicación Flask"""
     
-    # Inicializar Flask-Limiter
+    # Inicializar Flask-Limiter solo para rutas de auth
+    def _auth_rate_limit_key():
+        """Excluir OPTIONS (CORS preflight) del rate limiting"""
+        if request.method == 'OPTIONS':
+            return None
+        return get_remote_address()
+
     limiter = Limiter(
         app=app,
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://", # Puedes cambiar esto a Redis o Memcached en producción
+        key_func=_auth_rate_limit_key,
+        default_limits=[],  # Sin límite por defecto, solo en rutas específicas
+        storage_uri="memory://",
         strategy="fixed-window"
     )
 
