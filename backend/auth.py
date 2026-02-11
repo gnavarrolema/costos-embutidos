@@ -4,8 +4,6 @@ Sistema simple de autenticación basado en JWT para uso interno
 """
 from functools import wraps
 from flask import request, jsonify, g
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from models import db, Usuario
 import jwt
 import os
@@ -98,26 +96,18 @@ def admin_required(f):
     return decorated
 
 
-def init_auth_routes(app):
-    """Registra las rutas de autenticación en la aplicación Flask"""
-    
-    # Inicializar Flask-Limiter solo para rutas de auth
-    def _auth_rate_limit_key():
-        """Excluir OPTIONS (CORS preflight) del rate limiting"""
-        if request.method == 'OPTIONS':
-            return None
-        return get_remote_address()
+def init_auth_routes(app, limiter=None):
+    """Registra las rutas de autenticación en la aplicación Flask.
 
-    limiter = Limiter(
-        app=app,
-        key_func=_auth_rate_limit_key,
-        default_limits=[],  # Sin límite por defecto, solo en rutas específicas
-        storage_uri="memory://",
-        strategy="fixed-window"
-    )
+    Args:
+        app: Flask application instance
+        limiter: Flask-Limiter instance (from app.py) for rate limiting auth routes
+    """
+    # Decorador de rate limit para login (no-op si no hay limiter)
+    login_limit = limiter.limit("5 per minute; 15 per hour") if limiter else (lambda f: f)
 
     @app.route('/api/auth/login', methods=['POST'])
-    @limiter.limit("5 per minute; 15 per hour") # Límite específico para el login
+    @login_limit
     def login():
         """Endpoint de login"""
         try:
