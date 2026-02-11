@@ -468,8 +468,8 @@ if os.environ.get('COSTOS_EMBUTIDOS_SKIP_INIT_DB') != '1':
     if db_status and (db_status['productos'] > 0 or db_status['materias_primas'] > 5):
         _create_db_backup()
 
-# Inicializar rutas de autenticación
-init_auth_routes(app)
+# Inicializar rutas de autenticación (pasar el limiter para rate-limit en login)
+init_auth_routes(app, limiter=limiter)
 
 
 # ===== CATEGORÍAS =====
