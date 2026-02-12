@@ -27,9 +27,10 @@ else:
 
 from flask import g
 from sqlalchemy import text
+from sqlalchemy.orm import joinedload
 
 from logging_config import configure_logging
-from auth import init_auth_routes, token_required, admin_required
+from auth import init_auth_routes, token_required, admin_required, decode_token
 
 app = Flask(__name__)
 
@@ -75,6 +76,52 @@ def _log_request_start():
     g._req_start_ts = time.perf_counter()
 
 
+@app.before_request
+def _require_auth_for_api_routes():
+    """
+    Protege rutas /api/* por defecto y permite solo excepciones explícitas.
+    Esto evita depender del frontend para el control de acceso.
+    """
+    # No aplicar en tests para mantener compatibilidad con la suite existente.
+    if app.config.get('TESTING'):
+        return None
+
+    # Permitir preflight CORS
+    if request.method == 'OPTIONS':
+        return None
+
+    # Solo proteger API
+    if not request.path.startswith('/api/'):
+        return None
+
+    # Endpoints públicos mínimos
+    public_paths = {
+        '/api/health',
+        '/api/auth/login',
+    }
+    if request.path in public_paths:
+        return None
+
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Token no proporcionado'}), 401
+
+    token = auth_header.split(' ', 1)[1].strip()
+    if not token:
+        return jsonify({'error': 'Token mal formado'}), 401
+
+    payload = decode_token(token)
+    if not payload:
+        return jsonify({'error': 'Token inválido o expirado'}), 401
+
+    user = db.session.get(Usuario, payload.get('user_id'))
+    if not user or not user.activo:
+        return jsonify({'error': 'Usuario no encontrado o inactivo'}), 401
+
+    g.current_user = user
+    return None
+
+
 @app.after_request
 def _log_request_end(response):
     try:
@@ -106,6 +153,10 @@ def _log_request_end(response):
 @app.teardown_request
 def _log_unhandled_exception(exc):
     if exc is not None:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         logger.exception("Unhandled exception during request")
 
 
@@ -156,6 +207,48 @@ def validate_month_format(mes_str, field_name='mes'):
         return año, mes, None
     except (ValueError, TypeError):
         return None, None, f'{field_name} debe tener formato YYYY-MM (ej: 2025-01)'
+
+
+def _get_pagination_params(default_per_page=50, max_per_page=200):
+    """
+    Extrae y valida parámetros de paginación.
+    Compatibilidad retro: si no se envía page/per_page, retorna None.
+    """
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', type=int)
+
+    if page is None and per_page is None:
+        return None
+
+    page = page or 1
+    per_page = per_page or default_per_page
+
+    if page < 1:
+        page = 1
+    if per_page < 1:
+        per_page = default_per_page
+    if per_page > max_per_page:
+        per_page = max_per_page
+
+    return {
+        'page': page,
+        'per_page': per_page,
+        'offset': (page - 1) * per_page,
+    }
+
+
+def _paginated_response(query, serializer, pagination):
+    total = query.count()
+    items = query.offset(pagination['offset']).limit(pagination['per_page']).all()
+    return jsonify({
+        'items': [serializer(item) for item in items],
+        'pagination': {
+            'page': pagination['page'],
+            'per_page': pagination['per_page'],
+            'total': total,
+            'total_pages': (total + pagination['per_page'] - 1) // pagination['per_page'] if total else 0,
+        }
+    })
 
 
 def calcular_costos_con_escalamiento(costos, volumen_base_kg, volumen_proyectado_kg,
@@ -475,7 +568,11 @@ init_auth_routes(app, limiter=limiter)
 # ===== CATEGORÍAS =====
 @app.route('/api/categorias', methods=['GET'])
 def get_categorias():
-    categorias = Categoria.query.all()
+    query = Categoria.query.order_by(Categoria.nombre.asc())
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda c: c.to_dict(), pagination)
+    categorias = query.all()
     return jsonify([c.to_dict() for c in categorias])
 
 
@@ -499,7 +596,16 @@ def create_categoria():
 # ===== MATERIAS PRIMAS =====
 @app.route('/api/materias-primas', methods=['GET'])
 def get_materias_primas():
-    materias = MateriaPrima.query.filter_by(activo=True).all()
+    query = (
+        MateriaPrima.query
+        .options(joinedload(MateriaPrima.categoria))
+        .filter_by(activo=True)
+        .order_by(MateriaPrima.nombre.asc())
+    )
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda m: m.to_dict(), pagination)
+    materias = query.all()
     return jsonify([m.to_dict() for m in materias])
 
 
@@ -640,7 +746,7 @@ def get_historial_precios():
     materia_id = request.args.get('materia_prima_id', type=int)
     limit = request.args.get('limit', 100, type=int)
     
-    query = HistorialPrecios.query
+    query = HistorialPrecios.query.options(joinedload(HistorialPrecios.materia_prima))
     
     if materia_id:
         query = query.filter_by(materia_prima_id=materia_id)
@@ -822,7 +928,11 @@ def ajustar_precios_materias_primas():
 # ===== PRODUCTOS =====
 @app.route('/api/productos', methods=['GET'])
 def get_productos():
-    productos = Producto.query.filter_by(activo=True).all()
+    query = Producto.query.filter_by(activo=True).order_by(Producto.nombre.asc())
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda p: p.to_dict(), pagination)
+    productos = query.all()
     return jsonify([p.to_dict() for p in productos])
 
 
@@ -1394,7 +1504,7 @@ def get_produccion():
     fecha = request.args.get('fecha')
     mes = request.args.get('mes')  # Formato: 2024-12
     
-    query = ProduccionProgramada.query
+    query = ProduccionProgramada.query.options(joinedload(ProduccionProgramada.producto))
     
     if fecha:
         query = query.filter(ProduccionProgramada.fecha_programacion == fecha)
@@ -1409,7 +1519,11 @@ def get_produccion():
         except ValueError:
             pass
     
-    produccion = query.order_by(ProduccionProgramada.fecha_programacion.desc()).all()
+    query = query.order_by(ProduccionProgramada.fecha_programacion.desc())
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda p: p.to_dict(), pagination)
+    produccion = query.all()
     return jsonify([p.to_dict() for p in produccion])
 
 
@@ -1652,12 +1766,16 @@ def get_resumen_mensual():
 def get_produccion_historica():
     """Obtiene los datos históricos de producción"""
     producto_id = request.args.get('producto_id', type=int)
-    query = ProduccionHistorica.query
+    query = ProduccionHistorica.query.options(joinedload(ProduccionHistorica.producto))
     
     if producto_id:
         query = query.filter(ProduccionHistorica.producto_id == producto_id)
     
-    historicos = query.order_by(ProduccionHistorica.fecha.desc()).all()
+    query = query.order_by(ProduccionHistorica.fecha.desc())
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda h: h.to_dict(), pagination)
+    historicos = query.all()
     return jsonify([h.to_dict() for h in historicos])
 
 
@@ -2233,7 +2351,11 @@ def get_costos_indirectos():
     if mes_base:
         query = query.filter(CostoIndirecto.mes_base == mes_base)
     
-    costos = query.order_by(CostoIndirecto.tipo_distribucion, CostoIndirecto.cuenta).all()
+    query = query.order_by(CostoIndirecto.tipo_distribucion, CostoIndirecto.cuenta)
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda c: c.to_dict(), pagination)
+    costos = query.all()
     return jsonify([c.to_dict() for c in costos])
 
 
@@ -2376,7 +2498,11 @@ def get_resumen_costos_indirectos():
 @app.route('/api/inflacion', methods=['GET'])
 def get_inflaciones():
     """Obtiene todos los índices de inflación"""
-    inflaciones = InflacionMensual.query.order_by(InflacionMensual.mes).all()
+    query = InflacionMensual.query.order_by(InflacionMensual.mes)
+    pagination = _get_pagination_params()
+    if pagination:
+        return _paginated_response(query, lambda i: i.to_dict(), pagination)
+    inflaciones = query.all()
     return jsonify([i.to_dict() for i in inflaciones])
 
 

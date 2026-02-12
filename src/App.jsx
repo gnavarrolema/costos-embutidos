@@ -1,37 +1,36 @@
-import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
     LayoutDashboard,
-    LineChart,
     Waypoints,
     Package,
     ShoppingBag,
     ClipboardList,
     Factory,
     Briefcase,
-    FileText,
     Brain,
     CalendarRange,
     BarChart3,
     LogOut,
     User,
     Users,
-    Settings,
     Calculator
 } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
-import Landing from './pages/Landing'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import MateriasPrimas from './pages/MateriasPrimas'
-import Productos from './pages/Productos'
-import Formulacion from './pages/Formulacion'
-import ProduccionProgramada from './pages/ProduccionProgramada'
-import Proyecciones from './pages/Proyecciones'
-import ProyeccionMultiPeriodo from './pages/ProyeccionMultiPeriodo'
-import CostosIndirectos from './pages/CostosIndirectos'
-import HojaCostos from './pages/HojaCostos'
-import Escenarios from './pages/Escenarios'
-import Usuarios from './pages/Usuarios'
+const Landing = lazy(() => import('./pages/Landing'))
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const MateriasPrimas = lazy(() => import('./pages/MateriasPrimas'))
+const Productos = lazy(() => import('./pages/Productos'))
+const Formulacion = lazy(() => import('./pages/Formulacion'))
+const ProduccionProgramada = lazy(() => import('./pages/ProduccionProgramada'))
+const Proyecciones = lazy(() => import('./pages/Proyecciones'))
+const ProyeccionMultiPeriodo = lazy(() => import('./pages/ProyeccionMultiPeriodo'))
+const CostosIndirectos = lazy(() => import('./pages/CostosIndirectos'))
+const HojaCostos = lazy(() => import('./pages/HojaCostos'))
+const Escenarios = lazy(() => import('./pages/Escenarios'))
+const Usuarios = lazy(() => import('./pages/Usuarios'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 import './App.css'
 
 // Componente de carga
@@ -116,26 +115,29 @@ function MainApp() {
                             <span className="user-role">{user?.rol}</span>
                         </div>
                     </div>
-                    <button className="logout-btn" onClick={handleLogout} title="Cerrar sesión">
+                    <button className="logout-btn" onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
                         <LogOut size={18} />
                     </button>
                 </div>
             </aside>
 
             <main className="main-content">
-                <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/planificacion" element={<ProyeccionMultiPeriodo />} />
-                    <Route path="/escenarios" element={<Escenarios />} />
-                    <Route path="/materias-primas" element={<MateriasPrimas />} />
-                    <Route path="/productos" element={<Productos />} />
-                    <Route path="/formulacion" element={<Formulacion />} />
-                    <Route path="/produccion" element={<ProduccionProgramada />} />
-                    <Route path="/costos-indirectos" element={<CostosIndirectos />} />
-                    <Route path="/hoja-costos" element={<HojaCostos />} />
-                    <Route path="/proyecciones" element={<Proyecciones />} />
-                    {isAdmin && <Route path="/usuarios" element={<Usuarios />} />}
-                </Routes>
+                <Suspense fallback={<LoadingScreen />}>
+                    <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/planificacion" element={<ProyeccionMultiPeriodo />} />
+                        <Route path="/escenarios" element={<Escenarios />} />
+                        <Route path="/materias-primas" element={<MateriasPrimas />} />
+                        <Route path="/productos" element={<Productos />} />
+                        <Route path="/formulacion" element={<Formulacion />} />
+                        <Route path="/produccion" element={<ProduccionProgramada />} />
+                        <Route path="/costos-indirectos" element={<CostosIndirectos />} />
+                        <Route path="/hoja-costos" element={<HojaCostos />} />
+                        <Route path="/proyecciones" element={<Proyecciones />} />
+                        {isAdmin && <Route path="/usuarios" element={<Usuarios />} />}
+                        <Route path="*" element={<NotFound />} />
+                    </Routes>
+                </Suspense>
             </main>
         </div>
     )
@@ -151,7 +153,11 @@ function App() {
 
     // Si está en la landing page, mostrarla siempre (sin importar autenticación)
     if (location.pathname === '/landing') {
-        return <Landing />
+        return (
+            <Suspense fallback={<LoadingScreen />}>
+                <Landing />
+            </Suspense>
+        )
     }
 
     // Si está en login, mostrar login
@@ -160,13 +166,21 @@ function App() {
         if (isAuthenticated) {
             return <MainApp />
         }
-        return <Login />
+        return (
+            <Suspense fallback={<LoadingScreen />}>
+                <Login />
+            </Suspense>
+        )
     }
 
     // Para cualquier otra ruta, verificar autenticación
     if (!isAuthenticated) {
         // Si no está autenticado, mostrar landing por defecto
-        return <Landing />
+        return (
+            <Suspense fallback={<LoadingScreen />}>
+                <Landing />
+            </Suspense>
+        )
     }
 
     return <MainApp />

@@ -106,6 +106,24 @@ def init_auth_routes(app, limiter=None):
     # Decorador de rate limit para login (no-op si no hay limiter)
     login_limit = limiter.limit("5 per minute; 15 per hour") if limiter else (lambda f: f)
 
+    def _pagination_params(default_per_page=50, max_per_page=200):
+        page = request.args.get('page', type=int)
+        per_page = request.args.get('per_page', type=int)
+
+        if page is None and per_page is None:
+            return None
+
+        page = page or 1
+        per_page = per_page or default_per_page
+        if page < 1:
+            page = 1
+        if per_page < 1:
+            per_page = default_per_page
+        if per_page > max_per_page:
+            per_page = max_per_page
+
+        return page, per_page
+
     @app.route('/api/auth/login', methods=['POST'])
     @login_limit
     def login():
@@ -204,7 +222,24 @@ def init_auth_routes(app, limiter=None):
     @admin_required
     def get_usuarios():
         """Lista todos los usuarios (solo admin)"""
-        usuarios = Usuario.query.all()
+        query = Usuario.query.order_by(Usuario.nombre.asc())
+        pagination = _pagination_params()
+
+        if pagination:
+            page, per_page = pagination
+            total = query.count()
+            usuarios = query.offset((page - 1) * per_page).limit(per_page).all()
+            return jsonify({
+                'items': [u.to_dict() for u in usuarios],
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': total,
+                    'total_pages': (total + per_page - 1) // per_page if total else 0,
+                }
+            })
+
+        usuarios = query.all()
         return jsonify([u.to_dict() for u in usuarios])
     
     @app.route('/api/usuarios', methods=['POST'])

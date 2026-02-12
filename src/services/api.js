@@ -5,6 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL
     : '/api'
 
 const TOKEN_KEY = 'costos_embutidos_token'
+const inFlightControllers = new Map()
 
 // Obtener token del localStorage
 function getAuthToken() {
@@ -33,16 +34,43 @@ async function request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`
     const token = getAuthToken()
 
+    const { cancelKey, signal, ...restOptions } = options
+    let finalSignal = signal
+
+    if (!finalSignal && cancelKey) {
+        const existingController = inFlightControllers.get(cancelKey)
+        if (existingController) {
+            existingController.abort()
+        }
+        const controller = new AbortController()
+        inFlightControllers.set(cancelKey, controller)
+        finalSignal = controller.signal
+    }
+
     const config = {
         headers: {
             'Content-Type': 'application/json',
             ...(token && { 'Authorization': `Bearer ${token}` }),
-            ...options.headers,
+            ...restOptions.headers,
         },
-        ...options,
+        ...restOptions,
+        signal: finalSignal,
     }
-    const response = await fetch(url, config)
-    return handleResponse(response)
+    try {
+        const response = await fetch(url, config)
+        return handleResponse(response)
+    } finally {
+        if (cancelKey) {
+            const currentController = inFlightControllers.get(cancelKey)
+            if (currentController && currentController.signal === finalSignal) {
+                inFlightControllers.delete(cancelKey)
+            }
+        }
+    }
+}
+
+export function createRequestController() {
+    return new AbortController()
 }
 
 // ===== CATEGORÍAS =====

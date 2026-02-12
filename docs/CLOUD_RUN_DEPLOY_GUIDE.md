@@ -563,18 +563,45 @@ gcloud projects add-iam-policy-binding costos-embutidos \
     --role="roles/iam.serviceAccountUser"
 ```
 
-### 8.2 Generar Clave JSON
+### 8.2 Configurar Workload Identity Federation (recomendado)
 
 ```bash
-# Generar clave JSON para autenticación
-gcloud iam service-accounts keys create gcp-key.json \
-    --iam-account=$SA_EMAIL
+# Variables (ajusta owner/repo)
+PROJECT_ID=costos-embutidos
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+POOL_ID=github-pool
+PROVIDER_ID=github-provider
+GITHUB_REPO=gnavarrolema/costos-embutidos
 
-# Ver el contenido (lo necesitarás para GitHub)
-cat gcp-key.json
+# Crear pool
+gcloud iam workload-identity-pools create $POOL_ID \
+    --project=$PROJECT_ID \
+    --location=global \
+    --display-name="GitHub Actions Pool"
+
+# Crear provider OIDC de GitHub
+gcloud iam workload-identity-pools providers create-oidc $PROVIDER_ID \
+    --project=$PROJECT_ID \
+    --location=global \
+    --workload-identity-pool=$POOL_ID \
+    --display-name="GitHub Provider" \
+    --issuer-uri="https://token.actions.githubusercontent.com" \
+    --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+    --attribute-condition="attribute.repository=='$GITHUB_REPO'"
+
+# Permitir que GitHub impersonifique la service account
+gcloud iam service-accounts add-iam-policy-binding $SA_EMAIL \
+    --project=$PROJECT_ID \
+    --role="roles/iam.workloadIdentityUser" \
+    --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/$POOL_ID/attribute.repository/$GITHUB_REPO"
+
+# Obtener resource name del provider (para secret de GitHub)
+gcloud iam workload-identity-pools providers describe $PROVIDER_ID \
+    --project=$PROJECT_ID \
+    --location=global \
+    --workload-identity-pool=$POOL_ID \
+    --format="value(name)"
 ```
-
-> ⚠️ **IMPORTANTE**: Guarda este archivo de forma segura. Nunca lo subas a Git.
 
 ### 8.3 Configurar Secrets en GitHub
 
@@ -586,11 +613,18 @@ cat gcp-key.json
 
    | Nombre del Secret | Valor |
    |-------------------|-------|
-   | `GCP_PROJECT_ID` | `costos-embutidos` |
-   | `GCP_SA_KEY` | Contenido completo de `gcp-key.json` |
    | `GCP_REGION` | `us-central1` |
 
-4. (Opcional) Crea variables (no secrets):
+4. Verifica en `.github/workflows/cd.yml` que estos valores coincidan con tu proyecto:
+
+    - `GCP_PROJECT_ID`
+    - `GCP_WORKLOAD_IDENTITY_PROVIDER`
+    - `GCP_SERVICE_ACCOUNT_EMAIL`
+    - `GCP_PROJECT_NUMBER`
+
+    Si tus IDs o proyecto cambian, actualiza esos `env` del workflow.
+
+5. (Opcional) Crea variables (no secrets):
 
    | Nombre de Variable | Valor |
    |--------------------|-------|
@@ -599,6 +633,8 @@ cat gcp-key.json
 ### 8.4 El Workflow de GitHub Actions
 
 El archivo `.github/workflows/cd.yml` ya está configurado para desplegar automáticamente a Cloud Run cuando hagas push a la rama `main`.
+
+> ✅ **Nota de seguridad**: este flujo evita claves JSON estáticas (`GCP_SA_KEY`) y usa credenciales efímeras vía OIDC.
 
 ---
 

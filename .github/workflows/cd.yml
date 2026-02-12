@@ -16,8 +16,11 @@ on:
           - production
 
 env:
+  GCP_PROJECT_ID: costos-embutidos
   GCP_REGION: us-central1
   GCP_PROJECT_NUMBER: "332269458514"
+  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/332269458514/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  GCP_SERVICE_ACCOUNT_EMAIL: github-actions@costos-embutidos.iam.gserviceaccount.com
   BACKEND_SERVICE: costos-backend
   FRONTEND_SERVICE: costos-frontend
   ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
@@ -81,6 +84,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: production
       url: https://costos-frontend-332269458514.us-central1.run.app
@@ -92,23 +98,24 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT_EMAIL }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
       - name: Build and Push Backend Image
         run: |
-          docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }} \
-                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:latest \
+          docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }} \
+                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/backend:latest \
                        -f backend/Dockerfile backend/
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }}
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:latest
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/backend:latest
 
       - name: Get Backend URL
         id: backend-url
@@ -122,11 +129,11 @@ jobs:
       - name: Build and Push Frontend Image
         run: |
           docker build --build-arg VITE_API_URL=${{ steps.backend-url.outputs.url }} \
-                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }} \
-                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:latest \
+                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }} \
+                       -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/frontend:latest \
                        -f Dockerfile.frontend .
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }}
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:latest
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/frontend:latest
 
       - name: Get Frontend URL (for CORS configuration)
         id: frontend-url
@@ -140,7 +147,7 @@ jobs:
       - name: Deploy Backend to Cloud Run
         run: |
           gcloud run deploy ${{ env.BACKEND_SERVICE }} \
-            --image=${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }} \
+            --image=${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/backend:${{ github.sha }} \
             --platform=managed \
             --region=${{ env.GCP_REGION }} \
             --allow-unauthenticated \
@@ -150,7 +157,7 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --execution-environment=gen2 \
-            --add-volume=name=data,type=cloud-storage,bucket=${{ secrets.GCP_PROJECT_ID }}-data \
+            --add-volume=name=data,type=cloud-storage,bucket=${{ env.GCP_PROJECT_ID }}-data \
             --add-volume-mount=volume=data,mount-path=/app/data \
             --set-env-vars="FLASK_ENV=production,COSTOS_LOG_LEVEL=INFO,SQLALCHEMY_DATABASE_URI=sqlite:////app/data/instance/costos_embutidos.db,ALLOWED_ORIGINS=${{ steps.frontend-url.outputs.url }}" \
             --set-secrets="JWT_SECRET_KEY=jwt-secret:latest"
@@ -158,7 +165,7 @@ jobs:
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy ${{ env.FRONTEND_SERVICE }} \
-            --image=${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }} \
+            --image=${{ env.ARTIFACT_REGISTRY }}/${{ env.GCP_PROJECT_ID }}/costos-repo/frontend:${{ github.sha }} \
             --platform=managed \
             --region=${{ env.GCP_REGION }} \
             --allow-unauthenticated \

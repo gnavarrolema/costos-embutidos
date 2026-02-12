@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
     Users,
     Plus,
@@ -36,6 +36,8 @@ function Usuarios() {
     })
     const [formError, setFormError] = useState('')
     const [saving, setSaving] = useState(false)
+    const modalRef = useRef(null)
+    const closeButtonRef = useRef(null)
 
     useEffect(() => {
         fetchUsuarios()
@@ -51,13 +53,76 @@ function Usuarios() {
             })
             if (!response.ok) throw new Error('Error al cargar usuarios')
             const data = await response.json()
-            setUsuarios(data)
+            setUsuarios(Array.isArray(data) ? data : (data.items || []))
         } catch (err) {
             setError(err.message)
         } finally {
             setLoading(false)
         }
     }
+
+    useEffect(() => {
+        if (!modalOpen || !modalRef.current) {
+            return
+        }
+
+        const modalElement = modalRef.current
+        const focusableSelectors = [
+            'button:not([disabled])',
+            'input:not([disabled])',
+            'select:not([disabled])',
+            'textarea:not([disabled])',
+            'a[href]',
+            '[tabindex]:not([tabindex="-1"])',
+        ].join(',')
+
+        const getFocusableElements = () =>
+            Array.from(modalElement.querySelectorAll(focusableSelectors))
+
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                event.preventDefault()
+                closeModal()
+                return
+            }
+
+            if (event.key !== 'Tab') {
+                return
+            }
+
+            const focusableElements = getFocusableElements()
+            if (focusableElements.length === 0) {
+                event.preventDefault()
+                return
+            }
+
+            const firstElement = focusableElements[0]
+            const lastElement = focusableElements[focusableElements.length - 1]
+            const activeElement = document.activeElement
+
+            if (event.shiftKey) {
+                if (activeElement === firstElement || !modalElement.contains(activeElement)) {
+                    event.preventDefault()
+                    lastElement.focus()
+                }
+            } else if (activeElement === lastElement) {
+                event.preventDefault()
+                firstElement.focus()
+            }
+        }
+
+        document.addEventListener('keydown', onKeyDown)
+        const focusableElements = getFocusableElements()
+        if (focusableElements.length > 0) {
+            focusableElements[0].focus()
+        } else if (closeButtonRef.current) {
+            closeButtonRef.current.focus()
+        }
+
+        return () => {
+            document.removeEventListener('keydown', onKeyDown)
+        }
+    }, [modalOpen])
 
     const openModal = (user = null) => {
         if (user) {
@@ -328,10 +393,17 @@ function Usuarios() {
             {/* Modal */}
             {modalOpen && (
                 <div className="modal-overlay" onClick={closeModal}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
+                    <div
+                        className="modal"
+                        onClick={e => e.stopPropagation()}
+                        ref={modalRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="usuarios-modal-title"
+                    >
                         <div className="modal-header">
-                            <h2>{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h2>
-                            <button className="btn-close" onClick={closeModal}>
+                            <h2 id="usuarios-modal-title">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h2>
+                            <button className="btn-close" onClick={closeModal} aria-label="Cerrar modal" ref={closeButtonRef}>
                                 <X size={20} />
                             </button>
                         </div>

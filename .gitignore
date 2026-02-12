@@ -64,6 +64,11 @@ instance/
 .cache/
 :memory:
 
+# Credenciales cloud
+gcp-key.json
+*service-account*.json
+*.sa-key.json
+
 # Modelos ML entrenados (generados en runtime)
 backend/models/*.pkl
 backend/models/*.meta.json
