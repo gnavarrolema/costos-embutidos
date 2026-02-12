@@ -125,12 +125,15 @@ function MainApp() {
                 <Suspense fallback={<LoadingScreen />}>
                     <Routes>
                         <Route path="/" element={<Dashboard />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/planificacion" element={<ProyeccionMultiPeriodo />} />
+                        <Route path="/proyeccion-multiperiodo" element={<ProyeccionMultiPeriodo />} />
                         <Route path="/escenarios" element={<Escenarios />} />
                         <Route path="/materias-primas" element={<MateriasPrimas />} />
                         <Route path="/productos" element={<Productos />} />
                         <Route path="/formulacion" element={<Formulacion />} />
                         <Route path="/produccion" element={<ProduccionProgramada />} />
+                        <Route path="/produccion-programada" element={<ProduccionProgramada />} />
                         <Route path="/costos-indirectos" element={<CostosIndirectos />} />
                         <Route path="/hoja-costos" element={<HojaCostos />} />
                         <Route path="/proyecciones" element={<Proyecciones />} />

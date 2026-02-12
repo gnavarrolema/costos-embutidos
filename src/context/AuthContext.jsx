@@ -11,6 +11,23 @@ const API_BASE = import.meta.env.VITE_API_URL
 const TOKEN_KEY = 'costos_embutidos_token'
 const USER_KEY = 'costos_embutidos_user'
 
+function getTokenExpirationMs(jwtToken) {
+    try {
+        const payloadBase64Url = jwtToken.split('.')[1]
+        if (!payloadBase64Url) return null
+
+        const payloadBase64 = payloadBase64Url
+            .replace(/-/g, '+')
+            .replace(/_/g, '/')
+            .padEnd(Math.ceil(payloadBase64Url.length / 4) * 4, '=')
+
+        const payload = JSON.parse(atob(payloadBase64))
+        return typeof payload.exp === 'number' ? payload.exp * 1000 : null
+    } catch {
+        return null
+    }
+}
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null)
     const [token, setToken] = useState(null)
@@ -23,11 +40,30 @@ export function AuthProvider({ children }) {
         const savedUser = localStorage.getItem(USER_KEY)
 
         if (savedToken && savedUser) {
+            const expiresAtMs = getTokenExpirationMs(savedToken)
+
+            if (expiresAtMs && Date.now() >= expiresAtMs) {
+                localStorage.removeItem(TOKEN_KEY)
+                localStorage.removeItem(USER_KEY)
+                setLoading(false)
+                return
+            }
+
+            let parsedUser
+            try {
+                parsedUser = JSON.parse(savedUser)
+            } catch {
+                localStorage.removeItem(TOKEN_KEY)
+                localStorage.removeItem(USER_KEY)
+                setLoading(false)
+                return
+            }
+
             // Verificar que el token siga siendo válido
             verifyToken(savedToken).then(isValid => {
                 if (isValid) {
                     setToken(savedToken)
-                    setUser(JSON.parse(savedUser))
+                    setUser(parsedUser)
                 } else {
                     // Token expirado, limpiar
                     localStorage.removeItem(TOKEN_KEY)
