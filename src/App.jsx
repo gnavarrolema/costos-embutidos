@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
 import {
     LayoutDashboard,
     Waypoints,
@@ -167,7 +167,7 @@ function App() {
     if (location.pathname === '/login') {
         // Si ya está autenticado, redirigir al dashboard
         if (isAuthenticated) {
-            return <MainApp />
+            return <Navigate to="/" replace />
         }
         return (
             <Suspense fallback={<LoadingScreen />}>
