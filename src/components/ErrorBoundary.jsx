@@ -12,9 +12,32 @@ class ErrorBoundary extends React.Component {
 
     componentDidCatch(error, errorInfo) {
         console.error('ErrorBoundary capturó un error:', error, errorInfo)
+
+        // Detectar error de chunk no encontrado (ocurre tras un re-deploy)
+        // y recargar automáticamente una sola vez
+        const isChunkError =
+            error?.message?.includes('Failed to fetch dynamically imported module') ||
+            error?.message?.includes('Loading chunk') ||
+            error?.message?.includes('Loading CSS chunk') ||
+            error?.name === 'ChunkLoadError'
+
+        const RELOAD_KEY = 'error_boundary_auto_reload'
+        const alreadyReloaded = sessionStorage.getItem(RELOAD_KEY)
+
+        if (isChunkError && !alreadyReloaded) {
+            sessionStorage.setItem(RELOAD_KEY, 'true')
+            window.location.reload()
+            return
+        }
+
+        // Limpiar el flag para futuros errores genuinos
+        if (!isChunkError) {
+            sessionStorage.removeItem(RELOAD_KEY)
+        }
     }
 
     handleReload = () => {
+        sessionStorage.removeItem('error_boundary_auto_reload')
         window.location.reload()
     }
 
