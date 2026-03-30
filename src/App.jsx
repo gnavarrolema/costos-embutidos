@@ -14,7 +14,8 @@ import {
     LogOut,
     User,
     Users,
-    Calculator
+    Calculator,
+    TrendingUp
 } from 'lucide-react'
 import { useAuth } from './context/AuthContext'
 const Landing = lazy(() => import('./pages/Landing'))
@@ -29,6 +30,7 @@ const ProyeccionMultiPeriodo = lazy(() => import('./pages/ProyeccionMultiPeriodo
 const CostosIndirectos = lazy(() => import('./pages/CostosIndirectos'))
 const HojaCostos = lazy(() => import('./pages/HojaCostos'))
 const Escenarios = lazy(() => import('./pages/Escenarios'))
+const AnalisisMarginal = lazy(() => import('./pages/AnalisisMarginal'))
 const Usuarios = lazy(() => import('./pages/Usuarios'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 import './App.css'
@@ -59,6 +61,7 @@ function MainApp() {
         // Operación
         { path: '/produccion', icon: <Factory size={20} />, label: 'Producción' },
         { path: '/hoja-costos', icon: <Calculator size={20} />, label: 'Hoja de Costos' },
+        { path: '/analisis-marginal', icon: <TrendingUp size={20} />, label: 'Análisis Marginal' },
         { path: '/planificacion', icon: <CalendarRange size={20} />, label: 'Planificación' },
         // Análisis avanzado
         { path: '/proyecciones', icon: <Brain size={20} />, label: 'Proyecciones ML' },
@@ -136,6 +139,7 @@ function MainApp() {
                         <Route path="/produccion-programada" element={<ProduccionProgramada />} />
                         <Route path="/costos-indirectos" element={<CostosIndirectos />} />
                         <Route path="/hoja-costos" element={<HojaCostos />} />
+                        <Route path="/analisis-marginal" element={<AnalisisMarginal />} />
                         <Route path="/proyecciones" element={<Proyecciones />} />
                         {isAdmin && <Route path="/usuarios" element={<Usuarios />} />}
                         <Route path="*" element={<NotFound />} />

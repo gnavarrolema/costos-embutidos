@@ -15,6 +15,7 @@ function Productos() {
         porcentaje_merma: '0.9',
         min_mo_kg: '0',
         min_batch: '0',
+        precio_venta: '0',
     })
 
     useEffect(() => {
@@ -44,7 +45,8 @@ function Productos() {
                 peso_batch_kg: item.peso_batch_kg.toString(),
                 porcentaje_merma: item.porcentaje_merma.toString(),
                 min_mo_kg: (item.min_mo_kg || 0).toString(),
-                min_batch: ((item.min_mo_kg || 0) * item.peso_batch_kg).toFixed(1).replace(/\.0$/, '')
+                min_batch: ((item.min_mo_kg || 0) * item.peso_batch_kg).toFixed(1).replace(/\.0$/, ''),
+                precio_venta: (item.precio_venta || 0).toString(),
             })
         } else {
             setEditingItem(null)
@@ -54,7 +56,8 @@ function Productos() {
                 peso_batch_kg: '',
                 porcentaje_merma: '0.9',
                 min_mo_kg: '0',
-                min_batch: '0'
+                min_batch: '0',
+                precio_venta: '0',
             })
         }
         setShowModal(true)
@@ -105,6 +108,7 @@ function Productos() {
                 peso_batch_kg: parseFloat(formData.peso_batch_kg) || 0,
                 porcentaje_merma: parseFloat(formData.porcentaje_merma) || 0,
                 min_mo_kg: parseFloat(formData.min_mo_kg) || 0,
+                precio_venta: parseFloat(formData.precio_venta) || 0,
             }
 
             if (editingItem) {
@@ -177,6 +181,7 @@ function Productos() {
                                 <th className="text-right">Peso Batch (Kg)</th>
                                 <th className="text-right">% Merma</th>
                                 <th className="text-right">Min M.O./Kg</th>
+                                <th className="text-right">Precio Venta ($/kg)</th>
                                 <th className="text-center">Estado</th>
                                 <th className="text-right">Acciones</th>
                             </tr>
@@ -184,7 +189,7 @@ function Productos() {
                         <tbody>
                             {productos.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" className="empty-state">
+                                    <td colSpan="8" className="empty-state">
                                         <div className="empty-state-icon">🌭</div>
                                         <div className="empty-state-title">No hay productos</div>
                                         <p>Comienza agregando un nuevo producto</p>
@@ -198,6 +203,7 @@ function Productos() {
                                         <td className="table-number">{formatNumber(p.peso_batch_kg, 3)} Kg</td>
                                         <td className="table-number">{formatNumber(p.porcentaje_merma, 2)}%</td>
                                         <td className="table-number">{formatNumber(p.min_mo_kg || 0, 2)}</td>
+                                        <td className="table-number">{p.precio_venta > 0 ? formatCurrency(p.precio_venta) : <span style={{color: '#9ca3af', fontStyle: 'italic'}}>Sin precio</span>}</td>
                                         <td className="text-center">
                                             <span className={`badge ${p.activo ? 'badge-activo' : 'badge-inactivo'}`}>
                                                 {p.activo ? 'Activo' : 'Inactivo'}
@@ -327,6 +333,20 @@ function Productos() {
                                         placeholder="120"
                                     />
                                     <small className="form-help">Calculado automáticamente: Min/Kg × Peso Batch</small>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Precio de Venta sin IVA ($/Kg)</label>
+                                    <input
+                                        type="number"
+                                        name="precio_venta"
+                                        className="form-input form-input-number"
+                                        value={formData.precio_venta}
+                                        onChange={handleChange}
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                    <small className="form-help">Precio unitario sin IVA por Kg (usado en análisis marginal)</small>
                                 </div>
                             </div>
                             <div className="modal-footer">

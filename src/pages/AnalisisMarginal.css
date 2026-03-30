@@ -1,0 +1,350 @@
+/* ===========================================
+   ANÁLISIS MARGINAL
+   =========================================== */
+
+.page-analisis-marginal {
+    padding: 1.5rem;
+    max-width: 1800px;
+    margin: 0 auto;
+}
+
+.page-analisis-marginal .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-analisis-marginal .page-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
+    font-size: 1.5rem;
+    color: #1f2937;
+}
+
+.page-analisis-marginal .page-subtitle {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 0.25rem 0 0;
+}
+
+/* Config */
+.am-config-card {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+}
+
+.am-config-row {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.am-config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 160px;
+}
+
+.am-config-item label {
+    font-size: 0.7rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.am-config-item select,
+.am-config-item input {
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid #d1d5db;
+    font-size: 0.85rem;
+    background-color: white;
+}
+
+.am-config-item .config-badge {
+    display: inline-block;
+    padding: 0.3rem 0.65rem;
+    border-radius: 0.375rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.am-config-item .config-badge.inflacion {
+    background-color: #fef2f2;
+    color: #dc2626;
+}
+
+.am-escenario-group {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.am-escenario-group .am-config-item {
+    min-width: 140px;
+}
+
+/* Tabla principal */
+.am-table-wrapper {
+    background: white;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    overflow-x: auto;
+}
+
+.am-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    min-width: 1200px;
+}
+
+.am-table thead {
+    background: linear-gradient(135deg, #1e3a5f, #2563eb);
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.am-table thead th {
+    padding: 0.65rem 0.6rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.am-table thead th:first-child {
+    text-align: left;
+    min-width: 180px;
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: #1e3a5f;
+}
+
+.am-table thead th:last-child {
+    border-right: none;
+}
+
+.am-table tbody tr {
+    border-bottom: 1px solid #f3f4f6;
+    transition: background-color 0.15s;
+}
+
+.am-table tbody tr:hover {
+    background-color: #f0f9ff;
+}
+
+.am-table tbody td {
+    padding: 0.55rem 0.6rem;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.am-table tbody td:first-child {
+    text-align: left;
+    font-weight: 500;
+    color: #1f2937;
+    position: sticky;
+    left: 0;
+    background: inherit;
+    z-index: 1;
+}
+
+.am-table tbody tr:hover td:first-child {
+    background-color: #f0f9ff;
+}
+
+/* Fila de totales */
+.am-table tbody tr.fila-total {
+    background-color: #fefce8;
+    font-weight: 700;
+    border-top: 2px solid #ca8a04;
+}
+
+.am-table tbody tr.fila-total td {
+    padding: 0.7rem 0.6rem;
+    color: #1f2937;
+}
+
+.am-table tbody tr.fila-total td:first-child {
+    background-color: #fefce8;
+}
+
+/* Celdas coloreadas */
+.am-cell-precio {
+    color: #1f2937;
+    font-weight: 500;
+}
+
+.am-cell-cv {
+    background-color: #fef3c7 !important;
+}
+
+.am-cell-cf {
+    background-color: #e0f2fe !important;
+}
+
+.am-cell-ct {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.am-cell-markup {
+    font-weight: 600;
+}
+
+.am-cell-markup.positivo {
+    color: #16a34a;
+}
+
+.am-cell-markup.negativo {
+    color: #dc2626;
+}
+
+.markup-icon {
+    display: inline-block;
+    margin-right: 0.15rem;
+    font-size: 0.7rem;
+}
+
+.am-cell-produccion {
+    background-color: #d1fae5 !important;
+    font-weight: 600;
+    color: #065f46;
+}
+
+.am-cell-cf-total {
+    color: #1f2937;
+}
+
+.am-cell-pe {
+    color: #7c3aed;
+    font-weight: 500;
+}
+
+.am-cell-mc {
+    font-weight: 600;
+}
+
+.am-cell-mc.alto {
+    color: #16a34a;
+}
+
+.am-cell-mc.medio {
+    color: #ca8a04;
+}
+
+.am-cell-mc.bajo {
+    color: #dc2626;
+}
+
+/* Sin precio warning */
+.sin-precio {
+    color: #9ca3af;
+    font-style: italic;
+    font-size: 0.75rem;
+}
+
+/* Product name cell */
+.producto-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.producto-cell .codigo {
+    font-size: 0.65rem;
+    color: #9ca3af;
+    font-family: monospace;
+}
+
+/* Resumen cards */
+.am-resumen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.am-resumen-card {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    text-align: center;
+}
+
+.am-resumen-card .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    margin-bottom: 0.35rem;
+}
+
+.am-resumen-card .value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.am-resumen-card .value.verde {
+    color: #16a34a;
+}
+
+.am-resumen-card .value.rojo {
+    color: #dc2626;
+}
+
+.am-resumen-card .value.azul {
+    color: #2563eb;
+}
+
+/* Loading / Empty */
+.am-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #9ca3af;
+}
+
+.am-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .page-analisis-marginal {
+        padding: 1rem;
+    }
+    .am-config-row {
+        flex-direction: column;
+    }
+    .am-resumen-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

@@ -128,6 +128,7 @@ class Producto(db.Model):
     peso_batch_kg = db.Column(db.Float, nullable=False)
     porcentaje_merma = db.Column(db.Float, nullable=False, default=0)
     min_mo_kg = db.Column(db.Float, nullable=False, default=0)  # Minutos mano de obra por kg
+    precio_venta = db.Column(db.Float, nullable=True, default=0)  # Precio de venta sin IVA ($/kg)
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -142,6 +143,7 @@ class Producto(db.Model):
             'peso_batch_kg': self.peso_batch_kg,
             'porcentaje_merma': self.porcentaje_merma,
             'min_mo_kg': self.min_mo_kg,
+            'precio_venta': self.precio_venta or 0,
             'activo': self.activo,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None
         }

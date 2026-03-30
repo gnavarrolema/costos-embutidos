@@ -260,6 +260,19 @@ export const distribucionApi = {
         request(`/distribucion-costos?mes_base=${mesBase}&mes_produccion=${mesProduccion}`),
 }
 
+// ===== ANÁLISIS MARGINAL =====
+export const analisisMarginalApi = {
+    get: (mesBase, mesProduccion, escenario = null) => {
+        let url = `/analisis-marginal?mes_base=${mesBase}&mes_produccion=${mesProduccion}`
+        if (escenario) {
+            if (escenario.tipo) url += `&escenario_tipo=${escenario.tipo}`
+            if (escenario.valor !== undefined && escenario.valor !== null) url += `&escenario_valor=${escenario.valor}`
+            if (escenario.extra) url += `&escenario_extra=${encodeURIComponent(escenario.extra)}`
+        }
+        return request(url, { cancelKey: 'analisis-marginal' })
+    },
+}
+
 // ===== PROYECCIÓN MULTI-PERÍODO =====
 export const proyeccionApi = {
     generarMultiPeriodo: (mesInicio, mesFin, mesBase, modo = 'mixto') =>

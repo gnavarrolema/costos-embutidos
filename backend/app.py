@@ -971,6 +971,11 @@ def create_producto():
     if error:
         return jsonify({'error': error}), 400
     
+    # Validar precio_venta (puede ser cero)
+    precio_venta, error = validate_positive_number(data.get('precio_venta', 0), 'precio_venta', allow_zero=True)
+    if error:
+        return jsonify({'error': error}), 400
+    
     # Normalizar código (eliminar ceros iniciales para comparación)
     codigo_normalizado = data['codigo'].lstrip('0') or '0'
     
@@ -997,6 +1002,7 @@ def create_producto():
             existing.peso_batch_kg = peso
             existing.porcentaje_merma = merma
             existing.min_mo_kg = min_mo
+            existing.precio_venta = precio_venta
             existing.activo = True
             db.session.commit()
             
@@ -1016,7 +1022,8 @@ def create_producto():
         nombre=data['nombre'],
         peso_batch_kg=peso,
         porcentaje_merma=merma,
-        min_mo_kg=min_mo
+        min_mo_kg=min_mo,
+        precio_venta=precio_venta
     )
     db.session.add(producto)
     db.session.commit()
@@ -1061,6 +1068,13 @@ def update_producto(id):
         if error:
             return jsonify({'error': error}), 400
         producto.min_mo_kg = min_mo
+    
+    # Validar precio_venta si se proporciona
+    if 'precio_venta' in data:
+        precio_venta, error = validate_positive_number(data['precio_venta'], 'precio_venta', allow_zero=True)
+        if error:
+            return jsonify({'error': error}), 400
+        producto.precio_venta = precio_venta
     
     # Si se cambia el código, validar que no haya duplicados equivalentes
     nuevo_codigo = data.get('codigo', producto.codigo)
@@ -2546,6 +2560,258 @@ def delete_inflacion(id):
     db.session.delete(inflacion)
     db.session.commit()
     return jsonify({'message': 'Inflación eliminada'})
+
+
+# ===== ANÁLISIS MARGINAL =====
+@app.route('/api/analisis-marginal', methods=['GET'])
+def get_analisis_marginal():
+    """
+    Genera el cuadro de análisis marginal para todos los productos con producción programada.
+
+    Query params:
+    - mes_base: Mes base de los costos indirectos (YYYY-MM)
+    - mes_produccion: Mes de producción a calcular (YYYY-MM)
+    - escenario_tipo: Tipo de escenario (opcional: inflacion, materia_prima, categoria, indirectos, produccion)
+    - escenario_valor: Valor porcentual del escenario (número)
+    - escenario_extra: Parámetro extra según tipo (id de MP, nombre de categoría, etc.)
+    """
+    mes_base = request.args.get('mes_base')
+    mes_produccion = request.args.get('mes_produccion')
+    escenario_tipo = request.args.get('escenario_tipo')
+    escenario_valor = request.args.get('escenario_valor', type=float)
+    escenario_extra = request.args.get('escenario_extra')
+
+    if not mes_base or not mes_produccion:
+        return jsonify({'error': 'Debe especificar mes_base y mes_produccion'}), 400
+
+    año_base, mes_base_num, error = validate_month_format(mes_base, 'mes_base')
+    if error:
+        return jsonify({'error': error}), 400
+
+    año_prod, mes_prod, error = validate_month_format(mes_produccion, 'mes_produccion')
+    if error:
+        return jsonify({'error': error}), 400
+
+    try:
+        # --- Obtener producción del mes ---
+        fecha_inicio = date(año_prod, mes_prod, 1)
+        fecha_fin = date(año_prod + 1, 1, 1) if mes_prod == 12 else date(año_prod, mes_prod + 1, 1)
+
+        producciones = ProduccionProgramada.query.filter(
+            ProduccionProgramada.fecha_programacion >= fecha_inicio,
+            ProduccionProgramada.fecha_programacion < fecha_fin
+        ).all()
+
+        if not producciones:
+            return jsonify({'error': f'No hay producción programada para {mes_produccion}'}), 404
+
+        # --- Costos indirectos ---
+        costos = CostoIndirecto.query.filter_by(mes_base=mes_base).all()
+        if not costos:
+            return jsonify({'error': f'No hay costos indirectos para mes base {mes_base}'}), 404
+
+        # --- Volumen base para escalamiento ---
+        historico_base = ProduccionHistorica.query.filter(
+            ProduccionHistorica.año == año_base,
+            ProduccionHistorica.mes == mes_base_num
+        ).all()
+
+        if historico_base:
+            volumen_base_kg = sum(h.cantidad_kg for h in historico_base)
+        else:
+            fecha_inicio_base = date(año_base, mes_base_num, 1)
+            fecha_fin_base = date(año_base + 1, 1, 1) if mes_base_num == 12 else date(año_base, mes_base_num + 1, 1)
+            producciones_base = ProduccionProgramada.query.filter(
+                ProduccionProgramada.fecha_programacion >= fecha_inicio_base,
+                ProduccionProgramada.fecha_programacion < fecha_fin_base
+            ).all()
+            volumen_base_kg = sum(p.cantidad_batches * p.producto.peso_batch_kg for p in producciones_base)
+
+        # --- Calcular totales de producción ---
+        total_kg_mes = 0
+        total_minutos_mes = 0
+        produccion_por_producto = {}
+
+        for prod in producciones:
+            producto = prod.producto
+            kg_producido = prod.cantidad_batches * producto.peso_batch_kg
+            minutos = kg_producido * producto.min_mo_kg
+
+            total_kg_mes += kg_producido
+            total_minutos_mes += minutos
+
+            if producto.id not in produccion_por_producto:
+                produccion_por_producto[producto.id] = {'producto': producto, 'kg': 0, 'minutos': 0, 'batches': 0}
+            produccion_por_producto[producto.id]['kg'] += kg_producido
+            produccion_por_producto[producto.id]['minutos'] += minutos
+            produccion_por_producto[producto.id]['batches'] += prod.cantidad_batches
+
+        # --- Escenario: ajuste de producción ---
+        ajuste_produccion = 1.0
+        if escenario_tipo == 'produccion' and escenario_valor is not None:
+            ajuste_produccion = 1 + (escenario_valor / 100)
+            total_kg_mes *= ajuste_produccion
+            total_minutos_mes *= ajuste_produccion
+            for pid in produccion_por_producto:
+                produccion_por_producto[pid]['kg'] *= ajuste_produccion
+                produccion_por_producto[pid]['minutos'] *= ajuste_produccion
+
+        # --- Inflación acumulada ---
+        meses_diferencia = (año_prod - año_base) * 12 + (mes_prod - mes_base_num)
+        inflacion_acumulada = 1.0
+        if meses_diferencia > 0:
+            if escenario_tipo == 'inflacion' and escenario_valor is not None:
+                for _ in range(meses_diferencia):
+                    inflacion_acumulada *= (1 + escenario_valor / 100)
+            else:
+                inflaciones = InflacionMensual.query.filter(
+                    InflacionMensual.mes > mes_base,
+                    InflacionMensual.mes <= mes_produccion
+                ).all()
+                for inf in inflaciones:
+                    inflacion_acumulada *= (1 + inf.porcentaje / 100)
+
+        # --- Escalamiento de costos indirectos ---
+        escalamiento = calcular_costos_con_escalamiento(costos, volumen_base_kg, total_kg_mes)
+
+        # Escenario: ajuste de indirectos
+        ajuste_indirectos = 1.0
+        if escenario_tipo == 'indirectos' and escenario_valor is not None:
+            ajuste_indirectos = 1 + (escenario_valor / 100)
+
+        total_sp_aj = escalamiento['totales_escalados']['SP'] * inflacion_acumulada * ajuste_indirectos
+        total_gif_aj = escalamiento['totales_escalados']['GIF'] * inflacion_acumulada * ajuste_indirectos
+        total_dep_aj = escalamiento['totales_escalados']['DEP'] * inflacion_acumulada * ajuste_indirectos
+        total_indirectos = total_sp_aj + total_gif_aj + total_dep_aj
+
+        # --- Construir filas por producto ---
+        filas = []
+        sum_cv = 0
+        sum_cf = 0
+        sum_kg = 0
+        sum_precio_x_kg = 0
+
+        for prod_id, datos in produccion_por_producto.items():
+            producto = datos['producto']
+            kg_prod = datos['kg']
+            minutos_prod = datos['minutos']
+
+            # --- Costo variable unitario ---
+            costeo = producto.get_costeo()
+            costo_variable_base = costeo['resumen']['costo_por_kg']
+
+            # Escenario: ajuste de MP o categoría
+            if escenario_tipo == 'materia_prima' and escenario_valor is not None and escenario_extra:
+                mp_id = int(escenario_extra)
+                factor_mp = 1 + (escenario_valor / 100)
+                total_neto_ajustado = 0
+                for ing in costeo['ingredientes']:
+                    costo_ing = ing['costo_total']
+                    if ing['materia_prima_id'] == mp_id:
+                        costo_ing *= factor_mp
+                    total_neto_ajustado += costo_ing
+                costo_merma_aj = total_neto_ajustado * (producto.porcentaje_merma / 100)
+                peso_neto = producto.peso_batch_kg * ((100 - producto.porcentaje_merma) / 100)
+                costo_variable_base = (total_neto_ajustado + costo_merma_aj) / peso_neto if peso_neto > 0 else 0
+            elif escenario_tipo == 'categoria' and escenario_valor is not None and escenario_extra:
+                cat_nombre = escenario_extra
+                factor_cat = 1 + (escenario_valor / 100)
+                total_neto_ajustado = 0
+                for ing in costeo['ingredientes']:
+                    costo_ing = ing['costo_total']
+                    if ing['categoria'] == cat_nombre:
+                        costo_ing *= factor_cat
+                    total_neto_ajustado += costo_ing
+                costo_merma_aj = total_neto_ajustado * (producto.porcentaje_merma / 100)
+                peso_neto = producto.peso_batch_kg * ((100 - producto.porcentaje_merma) / 100)
+                costo_variable_base = (total_neto_ajustado + costo_merma_aj) / peso_neto if peso_neto > 0 else 0
+
+            costo_variable_unitario = costo_variable_base * inflacion_acumulada
+
+            # --- Costo fijo unitario (indirecto distribuido por producto) ---
+            pct_kg = (kg_prod / total_kg_mes) if total_kg_mes > 0 else 0
+            pct_sp = (minutos_prod / total_minutos_mes) if total_minutos_mes > 0 else pct_kg
+
+            costo_fijo_total_producto = (total_sp_aj * pct_sp) + (total_gif_aj * pct_kg) + (total_dep_aj * pct_kg)
+            costo_fijo_unitario = costo_fijo_total_producto / kg_prod if kg_prod > 0 else 0
+
+            # --- Métricas derivadas ---
+            costo_unitario_total = costo_variable_unitario + costo_fijo_unitario
+            proporcion_cv_ct = (costo_variable_unitario / costo_unitario_total * 100) if costo_unitario_total > 0 else 0
+
+            precio_venta = producto.precio_venta or 0
+            markup = ((precio_venta - costo_unitario_total) / costo_unitario_total * 100) if costo_unitario_total > 0 else 0
+
+            margen_contribucion = costo_variable_unitario
+            mc_unitario = precio_venta - costo_variable_unitario
+            margen_contribucion_pct = (mc_unitario / precio_venta * 100) if precio_venta > 0 else 0
+
+            # Punto de equilibrio (kg) = Costo Fijo Total / (Precio - CV unitario)
+            punto_equilibrio = 0
+            if mc_unitario > 0:
+                punto_equilibrio = costo_fijo_total_producto / mc_unitario
+
+            sum_cv += costo_variable_unitario * kg_prod
+            sum_cf += costo_fijo_total_producto
+            sum_kg += kg_prod
+            sum_precio_x_kg += precio_venta * kg_prod
+
+            filas.append({
+                'producto_id': producto.id,
+                'producto_codigo': producto.codigo,
+                'producto_nombre': producto.nombre,
+                'precio_venta': round(precio_venta, 2),
+                'costo_variable_unitario': round(costo_variable_unitario, 2),
+                'costo_fijo_unitario': round(costo_fijo_unitario, 2),
+                'costo_unitario_total': round(costo_unitario_total, 2),
+                'proporcion_cv_ct': round(proporcion_cv_ct, 2),
+                'markup': round(markup, 2),
+                'produccion_kg': round(kg_prod, 2),
+                'costo_fijo_total_producto': round(costo_fijo_total_producto, 2),
+                'punto_equilibrio_kg': round(punto_equilibrio, 2),
+                'margen_contribucion_pct': round(margen_contribucion_pct, 2),
+            })
+
+        # --- Totales ponderados ---
+        precio_ponderado = sum_precio_x_kg / sum_kg if sum_kg > 0 else 0
+        cv_ponderado = sum_cv / sum_kg if sum_kg > 0 else 0
+        cf_ponderado = sum_cf / sum_kg if sum_kg > 0 else 0
+        costo_total_ponderado = cv_ponderado + cf_ponderado
+        proporcion_cv_ct_total = (cv_ponderado / costo_total_ponderado * 100) if costo_total_ponderado > 0 else 0
+        markup_ponderado = ((precio_ponderado - costo_total_ponderado) / costo_total_ponderado * 100) if costo_total_ponderado > 0 else 0
+        mc_ponderado = precio_ponderado - cv_ponderado
+        mc_pct_total = (mc_ponderado / precio_ponderado * 100) if precio_ponderado > 0 else 0
+        pe_total = sum_cf / mc_ponderado if mc_ponderado > 0 else 0
+
+        totales = {
+            'precio_ponderado': round(precio_ponderado, 2),
+            'costo_variable_ponderado': round(cv_ponderado, 2),
+            'costo_fijo_ponderado': round(cf_ponderado, 2),
+            'costo_total_ponderado': round(costo_total_ponderado, 2),
+            'proporcion_cv_ct': round(proporcion_cv_ct_total, 2),
+            'markup_ponderado': round(markup_ponderado, 2),
+            'total_produccion_kg': round(sum_kg, 2),
+            'total_costo_fijo': round(sum_cf, 2),
+            'punto_equilibrio_kg': round(pe_total, 2),
+            'margen_contribucion_pct': round(mc_pct_total, 2),
+        }
+
+        logger.info(
+            "analisis_marginal.done mes_base=%s mes_produccion=%s items=%s kg_total=%.2f",
+            mes_base, mes_produccion, len(filas), sum_kg
+        )
+
+        return jsonify({
+            'mes_base': mes_base,
+            'mes_produccion': mes_produccion,
+            'inflacion_acumulada_pct': round((inflacion_acumulada - 1) * 100, 2),
+            'filas': filas,
+            'totales': totales
+        })
+
+    except Exception as e:
+        logger.exception("analisis_marginal.error mes_base=%s mes_produccion=%s", mes_base, mes_produccion)
+        return jsonify({'error': str(e)}), 500
 
 
 # ===== DISTRIBUCIÓN DE COSTOS =====
