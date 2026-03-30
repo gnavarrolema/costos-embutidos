@@ -386,6 +386,20 @@ def init_db(app):
             # Ignorar si la tabla no existe aún o hay otro error
             print(f"⚠️ Migración es_variable: {e}")
         
+        # Agregar columna precio_venta a productos si no existe
+        try:
+            from sqlalchemy import text, inspect as sa_inspect
+            insp = sa_inspect(db.engine)
+            prod_columns = [col['name'] for col in insp.get_columns('productos')]
+            
+            if 'precio_venta' not in prod_columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text('ALTER TABLE productos ADD COLUMN precio_venta FLOAT DEFAULT 0'))
+                    conn.commit()
+                print("✅ Migración: columna precio_venta agregada a productos")
+        except Exception as e:
+            print(f"⚠️ Migración precio_venta: {e}")
+        
         # Crear usuario administrador por defecto si no existe ninguno
         if Usuario.query.count() == 0:
             admin = Usuario(
