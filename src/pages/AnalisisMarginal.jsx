@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { TrendingUp } from 'lucide-react'
 import {
     analisisMarginalApi,
@@ -60,15 +60,22 @@ export default function AnalisisMarginal() {
         return [...new Set(materiasPrimas.map(mp => mp.categoria))].filter(Boolean)
     }, [materiasPrimas])
 
+    const debounceRef = useRef(null)
+    const debouncedLoadAnalisis = useCallback(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(() => loadAnalisis(), 400)
+    }, [mesBase, mesProduccion, escTipo, escValor, escExtra])
+
     useEffect(() => {
         loadInitialData()
     }, [])
 
     useEffect(() => {
         if (mesBase && mesProduccion) {
-            loadAnalisis()
+            debouncedLoadAnalisis()
         }
-    }, [mesBase, mesProduccion, escTipo, escValor, escExtra])
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+    }, [mesBase, mesProduccion, escTipo, escValor, escExtra, debouncedLoadAnalisis])
 
     async function loadInitialData() {
         setLoading(true)

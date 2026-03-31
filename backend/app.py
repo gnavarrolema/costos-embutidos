@@ -2704,27 +2704,37 @@ def get_analisis_marginal():
             if escenario_tipo == 'materia_prima' and escenario_valor is not None and escenario_extra:
                 mp_id = int(escenario_extra)
                 factor_mp = 1 + (escenario_valor / 100)
-                total_neto_ajustado = 0
+                total_mp_ajustado = 0
+                total_envases_aj = 0
                 for ing in costeo['ingredientes']:
                     costo_ing = ing['costo_total']
                     if ing['materia_prima_id'] == mp_id:
                         costo_ing *= factor_mp
-                    total_neto_ajustado += costo_ing
-                costo_merma_aj = total_neto_ajustado * (producto.porcentaje_merma / 100)
+                    if ing['categoria'] == 'ENVASES':
+                        total_envases_aj += costo_ing
+                    else:
+                        total_mp_ajustado += costo_ing
+                costo_merma_aj = total_mp_ajustado * (producto.porcentaje_merma / 100)
+                total_neto_ajustado = total_mp_ajustado + costo_merma_aj + total_envases_aj
                 peso_neto = producto.peso_batch_kg * ((100 - producto.porcentaje_merma) / 100)
-                costo_variable_base = (total_neto_ajustado + costo_merma_aj) / peso_neto if peso_neto > 0 else 0
+                costo_variable_base = total_neto_ajustado / peso_neto if peso_neto > 0 else 0
             elif escenario_tipo == 'categoria' and escenario_valor is not None and escenario_extra:
                 cat_nombre = escenario_extra
                 factor_cat = 1 + (escenario_valor / 100)
-                total_neto_ajustado = 0
+                total_mp_ajustado = 0
+                total_envases_aj = 0
                 for ing in costeo['ingredientes']:
                     costo_ing = ing['costo_total']
                     if ing['categoria'] == cat_nombre:
                         costo_ing *= factor_cat
-                    total_neto_ajustado += costo_ing
-                costo_merma_aj = total_neto_ajustado * (producto.porcentaje_merma / 100)
+                    if ing['categoria'] == 'ENVASES':
+                        total_envases_aj += costo_ing
+                    else:
+                        total_mp_ajustado += costo_ing
+                costo_merma_aj = total_mp_ajustado * (producto.porcentaje_merma / 100)
+                total_neto_ajustado = total_mp_ajustado + costo_merma_aj + total_envases_aj
                 peso_neto = producto.peso_batch_kg * ((100 - producto.porcentaje_merma) / 100)
-                costo_variable_base = (total_neto_ajustado + costo_merma_aj) / peso_neto if peso_neto > 0 else 0
+                costo_variable_base = total_neto_ajustado / peso_neto if peso_neto > 0 else 0
 
             costo_variable_unitario = costo_variable_base * inflacion_acumulada
 
@@ -2742,7 +2752,6 @@ def get_analisis_marginal():
             precio_venta = producto.precio_venta or 0
             markup = ((precio_venta - costo_unitario_total) / costo_unitario_total * 100) if costo_unitario_total > 0 else 0
 
-            margen_contribucion = costo_variable_unitario
             mc_unitario = precio_venta - costo_variable_unitario
             margen_contribucion_pct = (mc_unitario / precio_venta * 100) if precio_venta > 0 else 0
 
