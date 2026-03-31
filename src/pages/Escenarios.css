@@ -52,6 +52,12 @@
     font-size: 1.1rem;
 }
 
+.config-hint {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
 /* Main Grid */
 .main-grid {
     display: grid;

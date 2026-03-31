@@ -4,6 +4,7 @@ import {
     historicoApi,
     productosApi,
     costosIndirectosApi,
+    costeoApi,
     inflacionApi,
     produccionApi,
     formatCurrency,
@@ -56,6 +57,9 @@ function Proyecciones() {
     const [training, setTraining] = useState(false)
     const [predicting, setPredicting] = useState(false)
     const [guardando, setGuardando] = useState(false)
+
+    // Flag unificado para evitar operaciones simultáneas
+    const operacionEnCurso = importing || training || predicting || guardando
     const [error, setError] = useState(null)
     const [mensaje, setMensaje] = useState(null)
     const [archivoSeleccionado, setArchivoSeleccionado] = useState(null)
@@ -142,6 +146,7 @@ function Proyecciones() {
             setMensaje('⚠️ Seleccione un archivo Excel primero')
             return
         }
+        if (operacionEnCurso) return
 
         setImporting(true)
         setMensaje(null)
@@ -179,6 +184,7 @@ function Proyecciones() {
     }
 
     async function handleTrain() {
+        if (operacionEnCurso) return
         setTraining(true)
         setMensaje(null)
         try {
@@ -197,6 +203,7 @@ function Proyecciones() {
     }
 
     async function handlePredict() {
+        if (operacionEnCurso) return
         if (!mesBase) {
             setMensaje('⚠️ Seleccione un mes base para costos indirectos')
             return
@@ -210,6 +217,8 @@ function Proyecciones() {
 
         setPredicting(true)
         setMensaje(null)
+        setPrediccionesConCostos([])
+        setPredicciones([])
         try {
             if (modoProyeccion === 'hibrido') {
                 // Modo híbrido: usa endpoint que combina programado + ML
@@ -296,26 +305,26 @@ function Proyecciones() {
             }
         })
 
-        //Calcular costos por producto
+        // Obtener costeos de todos los productos en paralelo
+        const costeoResults = await Promise.all(
+            prediccionesConDatos.map(pred => {
+                const prod = productos.find(p => p.id === pred.producto_id)
+                if (!prod) return Promise.resolve({ prod: null, costeo: null, pred })
+                return costeoApi.getByProducto(prod.id)
+                    .then(costeo => ({ prod, costeo, pred }))
+                    .catch(() => ({ prod, costeo: null, pred }))
+            })
+        )
+
+        // Calcular costos por producto
         const resultado = []
-        for (const pred of prediccionesConDatos) {
-            const prod = productos.find(p => p.id === pred.producto_id)
+        for (const { prod, costeo, pred } of costeoResults) {
             if (!prod) continue
 
             const kg = pred.cantidad_kg
             const minutos = kg * (prod.min_mo_kg || 0)
 
-            // Obtener costeo del producto usando la API correcta
-            let mpBaseKg = 0
-            try {
-                const costeo = await costeoApi.getByProducto(prod.id)
-                if (costeo?.resumen) {
-                    mpBaseKg = costeo.resumen.costo_por_kg || 0
-                }
-                // Si no hay costeo, mpBaseKg queda en 0 (producto sin fórmula)
-            } catch (err) {
-                console.error('Error obteniendo costeo:', err)
-            }
+            const mpBaseKg = costeo?.resumen?.costo_por_kg || 0
 
             // MP con inflación
             const mpPorKg = mpBaseKg * inflacionAcumulada
@@ -355,6 +364,7 @@ function Proyecciones() {
             setMensaje('⚠️ No hay predicciones para guardar')
             return
         }
+        if (operacionEnCurso) return
 
         setGuardando(true)
         setMensaje(null)

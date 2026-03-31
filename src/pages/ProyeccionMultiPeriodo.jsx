@@ -86,6 +86,11 @@ function ProyeccionMultiPeriodo() {
             setError('Debe seleccionar un mes base con costos indirectos configurados')
             return
         }
+        if (mesInicio > mesFin) {
+            setError('El mes de inicio debe ser anterior o igual al mes de fin')
+            return
+        }
+        if (loading) return
 
         setLoading(true)
         setError(null)

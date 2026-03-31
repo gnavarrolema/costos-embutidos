@@ -4632,10 +4632,19 @@ def proyeccion_multiperiodo():
         año_fin, mes_fin_num = map(int, mes_fin.split('-'))
         año_base, mes_base_num = map(int, mes_base_costos.split('-'))
         
+        # Validar rango de fechas
+        fecha_inicio_obj = date(año_inicio, mes_inicio_num, 1)
+        fecha_fin_obj = date(año_fin, mes_fin_num, 1)
+        if fecha_inicio_obj > fecha_fin_obj:
+            return jsonify({'error': 'mes_inicio debe ser anterior o igual a mes_fin'}), 400
+        # Limitar a 24 meses máximo para evitar loops excesivos
+        meses_diff = (año_fin - año_inicio) * 12 + (mes_fin_num - mes_inicio_num)
+        if meses_diff > 24:
+            return jsonify({'error': 'El rango máximo es de 24 meses'}), 400
+        
         # Generar lista de meses en el rango
         meses_proyeccion = []
         fecha_actual = date(año_inicio, mes_inicio_num, 1)
-        fecha_fin_obj = date(año_fin, mes_fin_num, 1)
         
         while fecha_actual <= fecha_fin_obj:
             meses_proyeccion.append(f"{fecha_actual.year}-{fecha_actual.month:02d}")

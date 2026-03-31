@@ -6,6 +6,7 @@ import {
     costosIndirectosApi,
     inflacionApi,
     materiasPrimasApi,
+    produccionApi,
     formatCurrency,
     formatNumber,
     getCategoryClass
@@ -72,6 +73,7 @@ function Escenarios() {
     const [costosIndirectosBase, setCostosIndirectosBase] = useState(null)
     const [inflacionesBase, setInflacionesBase] = useState([])
     const [mesesConCostos, setMesesConCostos] = useState([])
+    const [volumenPlanta, setVolumenPlanta] = useState(null) // {totalKg, totalMinutos} de toda la planta para el mes
 
     // Planificación base
     const [planificacionBase, setPlanificacionBase] = useState([])
@@ -97,6 +99,13 @@ function Escenarios() {
     useEffect(() => {
         loadInitialData()
     }, [])
+
+    // Recargar volumen de planta cuando cambia el mes de producción
+    useEffect(() => {
+        if (mesProduccion) {
+            loadVolumenPlanta(mesProduccion)
+        }
+    }, [mesProduccion])
 
     useEffect(() => {
         // Establecer mes de producción por defecto si no está configurado
@@ -147,8 +156,10 @@ function Escenarios() {
             setCosteoProductos(costeos)
 
             // Mes de producción por defecto
-            if (getFutureMonthOptions().length > 0) {
-                setMesProduccion(getFutureMonthOptions()[0].value)
+            const mesDefault = getFutureMonthOptions()[0]?.value
+            if (mesDefault) {
+                setMesProduccion(mesDefault)
+                await loadVolumenPlanta(mesDefault)
             }
 
             // Crear planificación base con todos los productos (ejemplo)
@@ -166,9 +177,36 @@ function Escenarios() {
         }
     }
 
+    async function loadVolumenPlanta(mes) {
+        try {
+            const resumen = await produccionApi.getResumenMensual(mes)
+            if (resumen && resumen.total_peso > 0) {
+                // Calcular minutos totales de la planta
+                let totalMinutosPlanta = 0
+                if (resumen.por_producto) {
+                    resumen.por_producto.forEach(pp => {
+                        const minMoKg = pp.producto?.min_mo_kg || 0
+                        totalMinutosPlanta += pp.peso * minMoKg
+                    })
+                }
+                setVolumenPlanta({
+                    totalKg: resumen.total_peso,
+                    totalMinutos: totalMinutosPlanta
+                })
+            } else {
+                setVolumenPlanta(null)
+            }
+        } catch {
+            setVolumenPlanta(null)
+        }
+    }
+
     // Calcular factor de inflación
     function calcularFactorInflacion(inflacionPct = null) {
         if (!mesBaseCostos || !mesProduccion) return 1
+
+        // Si el mes de producción es anterior o igual al mes base, no hay inflación
+        if (mesProduccion <= mesBaseCostos) return 1
 
         const mesesEntre = getMonthsBetween(mesBaseCostos, mesProduccion)
         let factor = 1
@@ -222,11 +260,15 @@ function Escenarios() {
         let totalMinutos = 0
 
         // Calcular costos variables y totales de kg/minutos
+        const productosSinFormula = []
         planificacionBase.forEach(plan => {
             const producto = productos.find(p => p.id === plan.producto_id)
             const costeo = costeoProductos[plan.producto_id]
 
-            if (!producto || !costeo) return
+            if (!producto) return
+            if (!costeo || !costeo.ingredientes || costeo.ingredientes.length === 0) {
+                productosSinFormula.push(producto.nombre)
+            }
 
             const kgAjustados = plan.kg * ajusteProduccion
             const batchesAjustados = Math.ceil(kgAjustados / producto.peso_batch_kg)
@@ -237,7 +279,7 @@ function Escenarios() {
 
             // Calcular costo variable con ajustes
             let costoProducto = 0
-            costeo.ingredientes?.forEach(ing => {
+            costeo?.ingredientes?.forEach(ing => {
                 let costoIng = ing.costo_total * batchesAjustados * factorInflacion
 
                 // Aplicar ajuste de MP específica
@@ -256,25 +298,47 @@ function Escenarios() {
             costoVariableTotal += costoProducto
         })
 
-        // Calcular costos indirectos con distribución correcta
+        // Calcular costos indirectos con distribución proporcional
+        // Si tenemos volumen total de la planta, distribuir proporcionalmente.
+        // Si no, asignar 100% (fallback).
+        let costoSP = 0
+        let costoGIF = 0
+        let costoDEP = 0
+        let pctParticipacionKg = 1
+        let pctParticipacionMin = 1
+        let distribucionProporcional = false
+
         if (costosIndirectosBase && totalKg > 0) {
-            // Separar costos por tipo
-            const totalSP = (costosIndirectosBase.por_tipo?.SP || 0) * factorInflacion * ajusteIndirectos
-            const totalGIF = (costosIndirectosBase.por_tipo?.GIF || 0) * factorInflacion * ajusteIndirectos
-            const totalDEP = (costosIndirectosBase.por_tipo?.DEP || 0) * factorInflacion * ajusteIndirectos
+            const spTotal = (costosIndirectosBase.por_tipo?.SP || 0) * factorInflacion * ajusteIndirectos
+            const gifTotal = (costosIndirectosBase.por_tipo?.GIF || 0) * factorInflacion * ajusteIndirectos
+            const depTotal = (costosIndirectosBase.por_tipo?.DEP || 0) * factorInflacion * ajusteIndirectos
 
-            // Distribuir SP por minutos de M.O.
-            // Distribuir GIF y DEP por kg producidos
-            // (En el contexto de escenarios, asumimos que estos costos se distribuyen 100% 
-            // sobre la planificación base, ya que no tenemos datos de otros productos del mes)
+            if (volumenPlanta && volumenPlanta.totalKg > 0) {
+                // Distribución proporcional al volumen de la planta
+                distribucionProporcional = true
+                pctParticipacionKg = Math.min(totalKg / volumenPlanta.totalKg, 1)
+                pctParticipacionMin = volumenPlanta.totalMinutos > 0
+                    ? Math.min(totalMinutos / volumenPlanta.totalMinutos, 1)
+                    : pctParticipacionKg
 
-            costoIndirectoTotal = totalSP + totalGIF + totalDEP
+                costoSP = spTotal * pctParticipacionMin
+                costoGIF = gifTotal * pctParticipacionKg
+                costoDEP = depTotal * pctParticipacionKg
+            } else {
+                // Fallback: sin datos de producción programada, asignar 100%
+                costoSP = spTotal
+                costoGIF = gifTotal
+                costoDEP = depTotal
+            }
+
+            costoIndirectoTotal = costoSP + costoGIF + costoDEP
         }
 
         const costoTotal = costoVariableTotal + costoIndirectoTotal
         const costoPorKg = totalKg > 0 ? costoTotal / totalKg : 0
 
         return {
+            productosSinFormula,
             totalKg,
             totalMinutos,
             costoVariableTotal,
@@ -282,17 +346,20 @@ function Escenarios() {
             costoTotal,
             costoPorKg,
             factorInflacion,
+            distribucionProporcional,
+            pctParticipacionKg,
+            volumenPlantaKg: volumenPlanta?.totalKg || null,
             // Desglose de indirectos
-            costoSP: costosIndirectosBase ? (costosIndirectosBase.por_tipo?.SP || 0) * factorInflacion * ajusteIndirectos : 0,
-            costoGIF: costosIndirectosBase ? (costosIndirectosBase.por_tipo?.GIF || 0) * factorInflacion * ajusteIndirectos : 0,
-            costoDEP: costosIndirectosBase ? (costosIndirectosBase.por_tipo?.DEP || 0) * factorInflacion * ajusteIndirectos : 0
+            costoSP,
+            costoGIF,
+            costoDEP
         }
     }
 
     // Resultados base y escenarios
     const resultadoBase = useMemo(() => calcularEscenario(null), [
         planificacionBase, productos, costeoProductos, costosIndirectosBase,
-        mesBaseCostos, mesProduccion, inflacionesBase
+        mesBaseCostos, mesProduccion, inflacionesBase, volumenPlanta
     ])
 
     const resultadosEscenarios = useMemo(() => {
@@ -301,11 +368,46 @@ function Escenarios() {
             resultado: calcularEscenario(esc)
         }))
     }, [escenarios, planificacionBase, productos, costeoProductos, costosIndirectosBase,
-        mesBaseCostos, mesProduccion, inflacionesBase])
+        mesBaseCostos, mesProduccion, inflacionesBase, volumenPlanta])
 
     function agregarEscenario() {
         if (!nuevoEscenario.nombre) {
             setMensaje({ type: 'error', text: 'Ingrese un nombre para el escenario' })
+            return
+        }
+
+        // Validar configuración según tipo
+        const { tipo, config } = nuevoEscenario
+        if (tipo === 'inflacion' && (config.porcentaje === undefined || config.porcentaje === null)) {
+            setMensaje({ type: 'error', text: 'Ingrese la tasa de inflación' })
+            return
+        }
+        if (tipo === 'materia_prima') {
+            if (!config.materia_prima_id) {
+                setMensaje({ type: 'error', text: 'Seleccione una materia prima' })
+                return
+            }
+            if (config.porcentaje === undefined || config.porcentaje === null) {
+                setMensaje({ type: 'error', text: 'Ingrese la variación de precio' })
+                return
+            }
+        }
+        if (tipo === 'categoria') {
+            if (!config.categoria) {
+                setMensaje({ type: 'error', text: 'Seleccione una categoría' })
+                return
+            }
+            if (config.porcentaje === undefined || config.porcentaje === null) {
+                setMensaje({ type: 'error', text: 'Ingrese la variación de precio' })
+                return
+            }
+        }
+        if ((tipo === 'indirectos' || tipo === 'produccion') && (config.porcentaje === undefined || config.porcentaje === null)) {
+            setMensaje({ type: 'error', text: 'Ingrese el porcentaje de variación' })
+            return
+        }
+        if (tipo === 'produccion' && config.porcentaje <= -100) {
+            setMensaje({ type: 'error', text: 'La reducción de producción no puede ser -100% o menor' })
             return
         }
 
@@ -328,9 +430,10 @@ function Escenarios() {
         const producto = productos.find(p => p.id === productoId)
         if (!producto) return
 
+        const kgNum = Math.max(0, parseFloat(kg) || 0)
         setPlanificacionBase(prev => prev.map(p =>
             p.producto_id === productoId
-                ? { ...p, kg: parseFloat(kg) || 0, batches: Math.ceil((parseFloat(kg) || 0) / producto.peso_batch_kg) }
+                ? { ...p, kg: kgNum, batches: Math.ceil(kgNum / producto.peso_batch_kg) }
                 : p
         ))
     }
@@ -377,6 +480,12 @@ function Escenarios() {
                 </div>
             )}
 
+            {resultadoBase.productosSinFormula?.length > 0 && (
+                <div className="alert alert-warning">
+                    ⚠️ {resultadoBase.productosSinFormula.length} producto(s) sin fórmula definida: {resultadoBase.productosSinFormula.join(', ')}. Su costo variable será $0.
+                </div>
+            )}
+
             {/* Configuración Base */}
             <div className="card config-card">
                 <div className="config-grid">
@@ -396,6 +505,15 @@ function Escenarios() {
                         <label>📈 Inflación Base Acumulada</label>
                         <div className="config-value inflacion">
                             +{((resultadoBase.factorInflacion - 1) * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                    <div className="config-item">
+                        <label>🏭 Producción Planta</label>
+                        <div className="config-value">
+                            {resultadoBase.distribucionProporcional
+                                ? <>{formatNumber(resultadoBase.volumenPlantaKg, 0)} Kg <span className="config-hint">({(resultadoBase.pctParticipacionKg * 100).toFixed(1)}% del escenario)</span></>
+                                : <span className="config-hint">Sin producción programada (100%)</span>
+                            }
                         </div>
                     </div>
                 </div>

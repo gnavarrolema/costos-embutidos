@@ -328,8 +328,8 @@ class ProductionPredictor:
                 df['_period'] = pd.PeriodIndex(pd.to_datetime(df['año'].astype(str) + '-' + df['mes'].astype(str).str.zfill(2) + '-01'), freq='M')
                 df = df[df['_period'] <= cutoff_period].drop(columns=['_period'])
             except Exception:
-                # Si el cutoff viene malformado, no bloquear entrenamiento
                 logger.warning("predictor.train.invalid_cutoff cutoff_ym=%s", str(cutoff_ym))
+                return {'success': False, 'error': f'Formato de cutoff inválido: {cutoff_ym}. Use YYYY-MM.'}
         
         # Agrupar por producto y mes/año (sumar si hay múltiples registros del mismo mes)
         df_grouped = df.groupby(['producto_id', 'año', 'mes']).agg({
