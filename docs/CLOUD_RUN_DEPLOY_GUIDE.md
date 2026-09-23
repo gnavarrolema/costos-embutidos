@@ -830,7 +830,9 @@ gcloud run services update costos-backend \
 
 ## 🗑️ Limpiar Recursos (Opcional)
 
-Si quieres eliminar todo para evitar cargos:
+> ✅ **Recomendado**: usa `./scripts/gcp/destroy.sh` (respalda y verifica los datos antes de borrar) y `./scripts/gcp/deploy.sh` para reanudar. Ver [GCP_PAUSE_RESUME.md](GCP_PAUSE_RESUME.md).
+
+Si quieres eliminar todo manualmente para evitar cargos:
 
 ```bash
 # Eliminar servicios de Cloud Run

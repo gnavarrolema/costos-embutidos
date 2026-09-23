@@ -1,0 +1,11 @@
+# Archivos que NO se suben a Cloud Build (gcloud builds submit).
+# Evita subir bases de datos locales, respaldos y dependencias.
+.gcloudignore
+.git
+.gitignore
+#!include:.gitignore
+backups/
+backend/backups/
+backend/*.db
+docs/
+.github/

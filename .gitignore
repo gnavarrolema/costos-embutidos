@@ -72,3 +72,6 @@ gcp-key.json
 # Modelos ML entrenados (generados en runtime)
 backend/models/*.pkl
 backend/models/*.meta.json
+
+# Respaldos locales de GCP (contienen la base de datos de producción)
+/backups/

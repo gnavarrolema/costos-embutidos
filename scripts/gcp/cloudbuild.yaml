@@ -1,0 +1,20 @@
+# Build remoto de ambas imágenes (usado por deploy.sh cuando no hay Docker local).
+# Uso: gcloud builds submit --config=scripts/gcp/cloudbuild.yaml --substitutions=... .
+steps:
+  - id: backend
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: ['build', '-t', '${_IMAGE_BASE}/backend:${_TAG}', '-t', '${_IMAGE_BASE}/backend:latest',
+           '-f', 'backend/Dockerfile', 'backend']
+  - id: frontend
+    name: gcr.io/cloud-builders/docker
+    waitFor: ['-']
+    args: ['build', '--build-arg', 'VITE_API_URL=${_API_URL}',
+           '-t', '${_IMAGE_BASE}/frontend:${_TAG}', '-t', '${_IMAGE_BASE}/frontend:latest',
+           '-f', 'Dockerfile.frontend', '.']
+images:
+  - '${_IMAGE_BASE}/backend:${_TAG}'
+  - '${_IMAGE_BASE}/backend:latest'
+  - '${_IMAGE_BASE}/frontend:${_TAG}'
+  - '${_IMAGE_BASE}/frontend:latest'
+timeout: 1800s

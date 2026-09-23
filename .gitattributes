@@ -1,0 +1,2 @@
+# Los scripts Bash deben tener finales de línea LF (core.autocrlf=true los rompería en WSL/Linux).
+*.sh text eol=lf
